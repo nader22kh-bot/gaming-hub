@@ -31,7 +31,7 @@
     $("multiJoin").onclick=async()=>{try{const value=$("multiCode").value.trim().toUpperCase();if(!/^[A-HJ-NP-Z2-9]{6}$/.test(value))throw new Error(t("Enter a valid six-character code.","أدخل رمزاً صحيحاً من 6 أحرف."));const d=await api("/api/baloot/rooms/"+value+"/join","POST",{});code=value;render(d.room);}catch(e){err(e);}};
   }
   function render(room){
-    lastState=room;code=room.code;
+    lastState=room;code=room.code;if(!timer)timer=setInterval(refresh,1600);
     if(room.phase==="lobby"){
       const seats=room.seats.map((p,i)=>`<div class="multi-seat"><span class="multi-seat-no">${i+1}</span><span>${p?escape(p.name):t("Waiting for player…","بانتظار لاعب…")}</span><b class="${p?.ready?"ready":""}">${p?(p.ready?t("Ready ✓","جاهز ✓"):t("Not ready","غير جاهز")):"—"}</b></div>`).join("");
       const me=room.seats.find(p=>p?.userId===String(tg?.initDataUnsafe?.user?.id));
