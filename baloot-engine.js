@@ -23,6 +23,18 @@ export function rankValue(card, contract, leadSuit) {
 export function cardPoints(card, contract) {
   return (contract?.type === "hokom" && card.suit === contract.trumpSuit ? TRUMP_POINTS : SUN_POINTS)[card.rank];
 }
+export function contractTargetPoints(contractType) {
+  if (contractType === "sun") return 65;
+  if (contractType === "hokom") return 81;
+  throw new Error("Unknown Baloot contract.");
+}
+export function scoreRound(teamPoints, contract) {
+  const target = contractTargetPoints(contract.type);
+  const made = teamPoints[contract.team] > target;
+  return { contractTeam: contract.team, contractType: contract.type, contractTarget: target,
+    contractScore: teamPoints[contract.team], defendingScore: teamPoints[1-contract.team],
+    made, winningTeam: made ? contract.team : 1-contract.team, teamPoints: [...teamPoints] };
+}
 export function legalCards(hand, trick, contract) {
   if (!trick.length) return hand;
   const lead = trick[0].card.suit;
@@ -130,12 +142,11 @@ export function applyMatchAction(state, userId, action, actionId) {
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
         const contractTeam = next.contract.team;
-        const contractTarget = next.contract.type === "sun" ? 65 : 81;
-        const made = next.teamPoints[contractTeam] > contractTarget;
-        const winningTeam = made ? contractTeam : 1 - contractTeam;
+        const score = scoreRound(next.teamPoints, next.contract);
+        const winningTeam = score.winningTeam;
         next.matchPoints[winningTeam] += 1;
         next.phase = "round_complete";
-        next.roundResult = { contractTeam, made, winningTeam, teamPoints: [...next.teamPoints], teamTricks: [...next.teamTricks], contractType: next.contract.type, contractTarget };
+        next.roundResult = { ...score, teamTricks: [...next.teamTricks] };
         event = { type: "round_complete", result: next.roundResult };
       }
     } else {
