@@ -281,11 +281,15 @@ async function start() {
           [payment.invoice_payload]
         );
         const invoice = pending.rows[0];
-        if (!invoice ||
-            String(invoice.telegram_id) !== userId ||
+        const isValidFirstPayment = invoice &&
+          String(invoice.telegram_id) === userId &&
+          invoice.amount === payment.total_amount &&
+          invoice.currency === payment.currency;
+        const isValidRenewal = Boolean(payment.is_recurring) &&
+          payment.invoice_payload.startsWith('vip30:' + userId + ':');
+        if ((!isValidFirstPayment && !isValidRenewal) ||
             payment.currency !== 'XTR' ||
-            payment.total_amount !== 100 ||
-            invoice.amount !== payment.total_amount) {
+            payment.total_amount !== 100) {
           console.error('Rejected unmatched VIP payment update:', payment.telegram_payment_charge_id);
           return;
         }
