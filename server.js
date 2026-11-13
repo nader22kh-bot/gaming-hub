@@ -190,6 +190,12 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
 
   try {
     const user = req.telegramUser;
+    const vipResult = await pool.query(
+      "SELECT expires_at FROM vip_subscriptions WHERE telegram_id = $1 AND status = 'active'",
+      [String(user.id)]
+    );
+    const isVip = Boolean(vipResult.rows[0] && new Date(vipResult.rows[0].expires_at) > new Date());
+    const awarded = isVip ? Math.round(reward * 1.5) : reward;
     const result = await pool.query(
       `INSERT INTO players (telegram_id, username, first_name, points)
        VALUES ($1, $3, $4, 120 + $2)
@@ -199,9 +205,9 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
            first_name = EXCLUDED.first_name,
            updated_at = NOW()
        RETURNING points`,
-      [String(user.id), reward, user.username || null, user.first_name || null]
+      [String(user.id), awarded, user.username || null, user.first_name || null]
     );
-    res.json({ accepted: true, awarded: reward, points: result.rows[0].points });
+    res.json({ accepted: true, awarded, vipBonus: isVip, points: result.rows[0].points });
   } catch (error) {
     console.error('Could not save score:', error);
     res.status(500).json({ error: 'Could not save your points. Please try again.' });
