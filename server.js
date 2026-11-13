@@ -76,7 +76,8 @@ const rewards = {
   memory_complete: 30,
   reaction_fast: 20,
   puzzle_correct: 10,
-  word_correct: 10
+  word_correct: 10,
+  baloot_stage: 25
 };
 
 if (bot) {
@@ -97,6 +98,69 @@ if (bot) {
   ));
 }
 
+
+const balootShopItems = {
+  felt_green: 100,
+  gold_deck: 250,
+  royal_frame: 400,
+  desert_table: 600
+};
+app.get('/api/baloot/status', requireTelegramUser, async (req,res)=>{
+ try{
+  const id=String(req.telegramUser.id);
+  const [player,progress,items]=await Promise.all([
+   pool.query('SELECT points FROM players WHERE telegram_id=$1',[id]),
+   pool.query('SELECT stage FROM baloot_progress WHERE telegram_id=$1',[id]),
+   pool.query('SELECT item_id FROM baloot_inventory WHERE telegram_id=$1 ORDER BY purchased_at',[id])
+  ]);
+  res.json({points:player.rows[0]?.points??120,stage:progress.rows[0]?.stage??1,inventory:items.rows.map(x=>x.item_id)});
+ }catch(e){console.error('Baloot status failed',e);res.status(500).json({error:'Could not load Baloot progress.'});}
+});
+app.post('/api/baloot/complete', requireTelegramUser, async (req,res)=>{
+ const stage=Number(req.body?.stage);
+ if(!Number.isInteger(stage)||stage<1||stage>20)return res.status(400).json({error:'Invalid stage.'});
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const p=await client.query('SELECT stage FROM baloot_progress WHERE telegram_id=$1 FOR UPDATE',[String(req.telegramUser.id)]);
+  const current=p.rows[0]?.stage??1;
+  if(stage!==current){await client.query('ROLLBACK');return res.status(409).json({error:'This stage was already claimed or is not unlocked.'});}
+  const player=await client.query(
+   `INSERT INTO players (telegram_id,username,first_name,points)
+    VALUES ($1,$2,$3,145)
+    ON CONFLICT (telegram_id) DO UPDATE SET points=players.points+25,updated_at=NOW()
+    RETURNING points`,
+   [String(req.telegramUser.id),req.telegramUser.username||null,req.telegramUser.first_name||null]
+  );
+  const next=Math.min(20,current+1);
+  await client.query(
+   `INSERT INTO baloot_progress (telegram_id,stage) VALUES ($1,$2)
+    ON CONFLICT (telegram_id) DO UPDATE SET stage=EXCLUDED.stage,updated_at=NOW()`,
+   [String(req.telegramUser.id),next]
+  );
+  await client.query('COMMIT');
+  res.json({points:player.rows[0].points,stage:next,reward:25});
+ }catch(e){await client.query('ROLLBACK');console.error('Baloot stage claim failed',e);res.status(500).json({error:'Could not save stage reward.'});}
+ finally{client.release();}
+});
+app.post('/api/baloot/shop', requireTelegramUser, async (req,res)=>{
+ const item=String(req.body?.item||'');
+ const cost=balootShopItems[item];
+ if(!cost)return res.status(400).json({error:'Unknown shop item.'});
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const already=await client.query('SELECT 1 FROM baloot_inventory WHERE telegram_id=$1 AND item_id=$2',[String(req.telegramUser.id),item]);
+  if(already.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'You already own this item.'});}
+  const player=await client.query('UPDATE players SET points=points-$2,updated_at=NOW() WHERE telegram_id=$1 AND points >= $2 RETURNING points',[String(req.telegramUser.id),cost]);
+  if(!player.rowCount){await client.query('ROLLBACK');return res.status(400).json({error:'Not enough points.'});}
+  await client.query('INSERT INTO baloot_inventory (telegram_id,item_id) VALUES ($1,$2)',[String(req.telegramUser.id),item]);
+  const inventory=await client.query('SELECT item_id FROM baloot_inventory WHERE telegram_id=$1 ORDER BY purchased_at',[String(req.telegramUser.id)]);
+  await client.query('COMMIT');
+  res.json({points:player.rows[0].points,inventory:inventory.rows.map(x=>x.item_id)});
+ }catch(e){await client.query('ROLLBACK');console.error('Baloot purchase failed',e);res.status(500).json({error:'Could not complete purchase.'});}
+ finally{client.release();}
+});
 app.get('/api/vip', requireTelegramUser, async (req, res) => {
   try {
     const result = await pool.query(
@@ -244,6 +308,21 @@ async function start() {
       expires_at TIMESTAMPTZ,
       last_charge_id TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS baloot_progress (
+      telegram_id BIGINT PRIMARY KEY,
+      stage INTEGER NOT NULL DEFAULT 1 CHECK (stage BETWEEN 1 AND 20),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS baloot_inventory (
+      telegram_id BIGINT NOT NULL,
+      item_id TEXT NOT NULL,
+      purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (telegram_id, item_id)
     )
   `);
   await pool.query(`
