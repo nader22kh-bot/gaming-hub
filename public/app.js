@@ -172,7 +172,57 @@ async function openVip(){
     }
   };
 }
-document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord}[b.dataset.game])());
+
+const balootCards=[{n:"7",v:1},{n:"8",v:2},{n:"9",v:3},{n:"J",v:4},{n:"Q",v:5},{n:"K",v:6},{n:"10",v:7},{n:"A",v:8}];
+const balootSuits=["♠","♥","♦","♣"];
+let balootStage=1,balootInventory=[];
+async function balootStatus(){
+ const r=await fetch("/api/baloot/status",{headers:{"X-Telegram-Init-Data":tg?.initData||""}});
+ if(!r.ok)throw new Error("Open the game from Telegram first.");
+ return r.json();
+}
+async function openBaloot(){
+ try{
+  const data=await balootStatus();balootStage=data.stage;balootInventory=data.inventory||[];
+  showBalootLobby(data.points);
+ }catch(e){showModal("<h2>🃏 Baloot</h2><p class='muted'>"+escapeHtml(e.message)+"</p>");}
+}
+function showBalootLobby(balance){
+ const ar=lang==="ar";
+ showModal(`<div class="baloot-screen"><div class="baloot-top"><span>🃏 BALOOT ARENA</span><span>🪙 ${balance??points}</span></div><h2>${ar?"تحدي البلوت":"Baloot Challenge"}</h2><p class="muted">${ar?"تدرّج في المراحل، اجمع الهدايا وافتح عناصر جديدة.":"Win card duels, clear stages, collect gifts and unlock new looks."}</p><div class="baloot-stage"><small>${ar?"المرحلة الحالية":"CURRENT STAGE"}</small><strong>${balootStage} / 20</strong><div class="stage-track"><i style="width:${Math.min(100,balootStage/20*100)}%"></i></div></div><div class="baloot-reward">🎁 ${ar?"مكافأة اجتياز المرحلة: 25 نقطة":"Stage reward: 25 points"}</div><button class="game-action" id="balootPlay">${ar?"ابدأ المرحلة":"Play stage"} · ${balootStage}</button><button class="answer" id="balootShop">${ar?"🛍️ متجر البلوت":"🛍️ Baloot shop"}</button><div class="baloot-owned">${ar?"مقتنياتك":"Your collection"}: ${balootInventory.length?balootInventory.join(" · "):(ar?"لا توجد عناصر بعد":"No items yet")}</div></div>`);
+ $("balootPlay").onclick=()=>startBalootStage();
+ $("balootShop").onclick=()=>openBalootShop();
+}
+function startBalootStage(){
+ let hand=Array.from({length:5},()=>({...balootCards[Math.floor(Math.random()*balootCards.length)],s:balootSuits[Math.floor(Math.random()*4)]}));
+ let wins=0,round=0,locked=false;
+ function render(){
+  showModal(`<div class="baloot-screen"><div class="baloot-top"><span>🃏 STAGE ${balootStage}</span><span>${round}/5</span></div><h2>${lang==="ar"?"اختر ورقتك":"Choose your card"}</h2><p class="muted">${lang==="ar"?"الفوز بالجولة يكون بالورقة الأعلى قيمة.":"Play the higher card to win the trick."}</p><div class="baloot-score">${lang==="ar"?"انتصاراتك":"Your wins"} <b>${wins}</b> / 5</div><div class="baloot-hand">${hand.map((c,i)=>`<button class="playing-card ${["♥","♦"].includes(c.s)?"red-card":""}" data-card="${i}"><small>${c.n}</small><strong>${c.s}</strong></button>`).join("")}</div><p id="balootFeedback" class="muted">${lang==="ar"?"اختر ورقة للعب":"Tap a card to play"}</p></div>`);
+  document.querySelectorAll("[data-card]").forEach(b=>b.onclick=async()=>{
+   if(locked)return;locked=true;
+   const idx=Number(b.dataset.card),chosen=hand.splice(idx,1)[0],ai=balootCards[Math.floor(Math.random()*balootCards.length)];
+   const won=chosen.v>=ai.v;if(won)wins++;round++;
+   const fb=$("balootFeedback");if(fb)fb.textContent=(lang==="ar"?"ورقتك ":"Your card ")+chosen.n+chosen.s+" · "+(lang==="ar"?"الخصم ":"Opponent ")+ai.n+(won?(lang==="ar"?" — فزت بالجولة!":" — You won the trick!"):(lang==="ar"?" — خسرْت الجولة":" — Opponent wins"));
+   if(round===5){
+    setTimeout(async()=>{
+     if(wins>=3){
+      try{const r=await fetch("/api/baloot/complete",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:JSON.stringify({stage:balootStage})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not save stage");points=d.points;$("points").textContent=points;balootStage=d.stage;await loadLeaderboard();showModal(`<div class="baloot-screen"><h2>🏆 ${lang==="ar"?"اجتزت المرحلة!":"Stage cleared!"}</h2><div class="big-number">🎁 +25</div><p>${lang==="ar"?"أحسنت! حصلت على 25 نقطة.":"Great play! You earned 25 points."}</p><button class="game-action" id="balootNext">${lang==="ar"?"المرحلة التالية":"Next stage"}</button></div>`);$("balootNext").onclick=openBaloot;
+      }catch(e){showModal("<h2>⚠️</h2><p>"+escapeHtml(e.message)+"</p><button class='answer' id='backBaloot'>Back</button>");$("backBaloot").onclick=openBaloot;}
+     }else{showModal(`<div class="baloot-screen"><h2>${lang==="ar"?"حاول مرة أخرى":"Try again"}</h2><p>${lang==="ar"?"تحتاج للفوز بثلاث جولات على الأقل.":"Win at least 3 of 5 tricks to clear this stage."}</p><button class="game-action" id="balootRetry">${lang==="ar"?"أعد المرحلة":"Retry stage"}</button></div>`);$("balootRetry").onclick=startBalootStage;}
+    },650);
+   }else{setTimeout(render,700);}
+  });
+ }
+ render();
+}
+async function openBalootShop(){
+ const items=[{id:"felt_green",name:"Green felt table",ar:"طاولة مخملية خضراء",cost:100,icon:"🟩"},{id:"gold_deck",name:"Golden card deck",ar:"أوراق ذهبية",cost:250,icon:"✨"},{id:"royal_frame",name:"Royal avatar frame",ar:"إطار ملكي للصورة",cost:400,icon:"👑"},{id:"desert_table",name:"Desert night table",ar:"طاولة ليلة الصحراء",cost:600,icon:"🌙"}];
+ const data=await balootStatus();balootInventory=data.inventory||[];
+ showModal(`<div class="baloot-screen"><h2>🛍️ ${lang==="ar"?"متجر البلوت":"Baloot shop"}</h2><p class="muted">${lang==="ar"?"اشترِ العناصر باستخدام نقاطك المكتسبة.":"Spend your earned game points on cosmetic items."} · 🪙 ${data.points}</p>${items.map(it=>`<div class="shop-item"><span class="shop-icon">${it.icon}</span><span><b>${lang==="ar"?it.ar:it.name}</b><small>${it.cost} points</small></span><button class="shop-buy" data-buy="${it.id}" ${balootInventory.includes(it.id)?"disabled":""}>${balootInventory.includes(it.id)?(lang==="ar"?"مملوك":"Owned"):(lang==="ar"?"شراء":"Buy")}</button></div>`).join("")}<button class="answer" id="shopBack">${lang==="ar"?"رجوع":"Back"}</button></div>`);
+ document.querySelectorAll("[data-buy]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await fetch("/api/baloot/shop",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:JSON.stringify({item:b.dataset.buy})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Purchase failed");points=d.points;$("points").textContent=points;balootInventory=d.inventory;openBalootShop();}catch(e){alert(e.message);b.disabled=false;}});
+ $("shopBack").onclick=openBaloot;
+}
+document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord,baloot:openBaloot}[b.dataset.game])());
 $("langBtn").onclick=()=>setLang(lang==="en"?"ar":"en");
 $("playNow").onclick=()=>startQuiz();
 $("vipBtn").addEventListener("click", event=>{event.preventDefault();openVip();});
