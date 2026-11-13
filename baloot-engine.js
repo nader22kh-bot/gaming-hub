@@ -130,11 +130,12 @@ export function applyMatchAction(state, userId, action, actionId) {
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
         const contractTeam = next.contract.team;
-        const made = next.teamPoints[contractTeam] > 81;
+        const contractTarget = next.contract.type === "sun" ? 65 : 81;
+        const made = next.teamPoints[contractTeam] > contractTarget;
         const winningTeam = made ? contractTeam : 1 - contractTeam;
         next.matchPoints[winningTeam] += 1;
         next.phase = "round_complete";
-        next.roundResult = { contractTeam, made, winningTeam, teamPoints: [...next.teamPoints], teamTricks: [...next.teamTricks] };
+        next.roundResult = { contractTeam, made, winningTeam, teamPoints: [...next.teamPoints], teamTricks: [...next.teamTricks], contractType: next.contract.type, contractTarget };
         event = { type: "round_complete", result: next.roundResult };
       }
     } else {
