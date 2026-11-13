@@ -13,7 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const token = process.env.BOT_TOKEN;
 const webAppUrl = process.env.WEBAPP_URL;
-const bot = token ? new Telegraf(token) : null;
+const bot = token && process.env.BOT_ENABLED !== "false" ? new Telegraf(token) : null;
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 if (!databaseUrl) {
@@ -75,7 +75,8 @@ const rewards = {
   quiz_correct: 10,
   memory_complete: 30,
   reaction_fast: 20,
-  puzzle_correct: 10
+  puzzle_correct: 10,
+  word_correct: 10
 };
 
 if (bot) {
