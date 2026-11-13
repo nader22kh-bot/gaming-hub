@@ -140,15 +140,59 @@ async function startVipPayment(){
     if(button){button.disabled=false;button.textContent=lang==="en"?"Subscribe · 100 ⭐ / month":"اشترك · ١٠٠ ⭐ شهرياً";}
   }
 }
-async function openVip(){
-  let status={active:false,expiresAt:null};
+async async function openVip(){
+  const isAr=lang==="ar";
+  let membership={active:false,expiresAt:null,priceStars:100,periodDays:30};
   if(tg?.initData){
-    try{const response=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg.initData}});if(response.ok)status=await response.json();}catch(error){console.warn("VIP status unavailable",error);}
+    try{
+      const response=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg.initData}});
+      if(response.ok) membership=await response.json();
+    }catch(error){console.warn("VIP status unavailable",error);}
   }
-  const date=status.expiresAt?new Date(status.expiresAt).toLocaleDateString(lang==="ar"?"ar-SA":"en-US"):"";
-  showModal(`<div class="vip-modal"><span class="vip-tag">⭐ VIP CLUB</span><h2>${lang==="en"?"Unlock more from Gaming Hub":"اكتشف مزايا أكثر مع Gaming Hub"}</h2><p class="muted">${lang==="en"?"A better way to play, compete and earn.":"تجربة أفضل للعب والمنافسة وجمع النقاط."}</p><div class="vip-benefits"><p>⭐ ${lang==="en"?"Exclusive VIP challenges":"تحديات حصرية للأعضاء"}</p><p>🎁 ${lang==="en"?"Bonus points and special rewards":"نقاط إضافية ومكافآت خاصة"}</p><p>🚫 ${lang==="en"?"Fewer advertisements":"إعلانات أقل"}</p><p>👑 ${lang==="en"?"VIP member status":"شارة العضوية المميزة"}</p></div>${status.active?`<p class="vip-active">✓ ${lang==="en"?"Your VIP membership is active until":"عضويتك فعّالة حتى"} ${date}</p>`:`<div class="vip-price"><strong>100 ⭐</strong><span>${lang==="en"?"every 30 days · automatic renewal":"كل ٣٠ يوماً · تجديد تلقائي"}</span></div><p class="muted">${lang==="en"?"Subscription renews automatically every 30 days until you cancel it in Telegram settings.":"يتجدد الاشتراك تلقائياً كل ٣٠ يوماً حتى تقوم بإلغائه من إعدادات تيليجرام."}</p><button class="game-action" id="vipPay">${lang==="en"?"Subscribe · 100 ⭐ / month":"اشترك · ١٠٠ ⭐ شهرياً"}</button>`}<button class="answer" id="vipClose">${t("close")}</button></div>`);
+  const expiry=membership.expiresAt?new Date(membership.expiresAt).toLocaleDateString(isAr?"ar-SA":"en-US"):"";
+  showModal(`<div class="vip-modal">
+    <span class="vip-tag">⭐ VIP CLUB</span>
+    <h2>${isAr?"ارتقِ بتجربتك في Gaming Hub":"Unlock more from Gaming Hub"}</h2>
+    <p class="muted">${isAr?"عضوية تمنحك مزايا إضافية وتجربة لعب مميزة.":"A more rewarding way to play, with exclusive member benefits."}</p>
+    <div class="vip-benefits">
+      <p>⭐ ${isAr?"تحديات VIP حصرية":"Exclusive VIP challenges"}</p>
+      <p>🎁 ${isAr?"مكافآت ونقاط إضافية":"Bonus points and special rewards"}</p>
+      <p>🚫 ${isAr?"إعلانات أقل":"Fewer advertisements"}</p>
+      <p>🌟 ${isAr?"شارة العضوية المميزة":"VIP member status"}</p>
+    </div>
+    ${membership.active?`<div class="vip-status">✓ ${isAr?"عضويتك فعّالة حتى":"Your membership is active until"} ${expiry}</div>
+      <p class="muted">${isAr?"تتم إدارة التجديد من إعدادات اشتراكات تيليجرام.":"Manage renewal from your Telegram subscription settings."}</p>`:
+      `<div class="vip-price"><strong>100 ⭐</strong><span>/ ${isAr?"كل 30 يوماً":"every 30 days"}</span></div>
+      <p class="muted">${isAr?"الدفع عبر Telegram Stars. يتجدد الاشتراك تلقائياً كل 30 يوماً ويمكنك إلغاء التجديد من تيليجرام.":"Pay with Telegram Stars. Renews automatically every 30 days; you can cancel renewal in Telegram."}</p>
+      <button class="game-action vip-pay" id="vipPay">${isAr?"اشترك الآن · 100 ⭐":"Subscribe now · 100 ⭐"}</button>`}
+    <button class="vip-secondary" id="vipClose">${isAr?"إغلاق":"Close"}</button>
+  </div>`);
   $("vipClose").onclick=closeModal;
-  if(!status.active)$("vipPay").onclick=startVipPayment;
+  const pay=$("vipPay");
+  if(pay) pay.onclick=async()=>{
+    if(!tg?.initData||!tg?.openInvoice){
+      pay.textContent=isAr?"افتح اللعبة من تيليجرام لإتمام الدفع":"Open Gaming Hub inside Telegram to pay";
+      return;
+    }
+    pay.disabled=true;pay.textContent=isAr?"جارٍ تجهيز الفاتورة…":"Preparing secure invoice…";
+    try{
+      const response=await fetch("/api/vip/invoice",{method:"POST",headers:{"X-Telegram-Init-Data":tg.initData}});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||"Invoice unavailable");
+      tg.openInvoice(data.invoiceLink,async(status)=>{
+        if(status==="paid"){
+          pay.textContent=isAr?"تم الدفع، جارٍ تحديث العضوية…":"Payment received, refreshing membership…";
+          setTimeout(openVip,1000);
+        }else{
+          pay.disabled=false;pay.textContent=isAr?"اشترك الآن · 100 ⭐":"Subscribe now · 100 ⭐";
+          if(status==="failed")alert(isAr?"تعذر إتمام الدفع. حاول مجدداً.":"Payment failed. Please try again.");
+        }
+      });
+    }catch(error){
+      pay.disabled=false;pay.textContent=isAr?"حاول مرة أخرى":"Try again";
+      alert(error.message);
+    }
+  };
 }
 document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord}[b.dataset.game])());
 $("langBtn").onclick=()=>setLang(lang==="en"?"ar":"en");
