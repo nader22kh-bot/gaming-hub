@@ -80,3 +80,18 @@ button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
 .shop-item{display:flex;align-items:center;gap:10px;padding:12px;margin:9px 0;border-radius:13px;background:#1d2b40;border:1px solid #35465f}
 .shop-icon{font-size:25px}.shop-item span:nth-child(2){flex:1;text-align:left}.shop-item b,.shop-item small{display:block;font-size:12px}.shop-item small{color:#aebbd0;margin-top:4px}.shop-buy{background:#277b64;color:white;border:0;border-radius:9px;padding:9px 12px;font-size:11px}.shop-buy:disabled{background:#455365}
 .baloot-owned{font-size:11px;color:#aebbd0;margin-top:12px}
+
+/* Private multiplayer Baloot tables */
+.multi-baloot{color:#f5f7fb}.multi-baloot h2{margin:14px 0 8px}.multi-join{display:grid;grid-template-columns:1fr 110px;gap:8px;margin-top:12px}
+.multi-join input,.multi-controls select{min-width:0;border:1px solid #43516a;border-radius:11px;background:#101a2c;color:#fff;padding:12px;font:inherit}
+.room-code{letter-spacing:4px;color:#f5d88d}.multi-seats{display:grid;gap:8px;margin:16px 0}
+.multi-seat{display:flex;align-items:center;gap:10px;padding:11px 12px;background:#1d2b40;border:1px solid #35465f;border-radius:12px;font-size:12px}
+.multi-seat span:nth-child(2){flex:1}.multi-seat b{font-size:10px;color:#aebbd0}.multi-seat b.ready{color:#7de0ae}
+.multi-seat-no{width:25px;height:25px;border-radius:9px;background:#33435d;display:grid;place-items:center}
+.multi-seat.active-turn{border-color:#77d6ae;box-shadow:0 0 0 1px #77d6ae44}
+.multi-score{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:12px 0;padding:12px;border-radius:12px;background:#183d38;color:#c9f3df;font-size:11px}
+.multi-score b{font-size:17px}.multi-trick{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;min-height:62px;align-items:center;padding:12px;border:1px dashed #52627a;border-radius:13px;color:#b8c5d8;font-size:12px}
+.trick-card{padding:8px 10px;background:#e9edf3;color:#1b2739;border-radius:9px;font-weight:800}
+.multi-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.multi-controls .answer{margin:0;text-align:center}
+.multi-controls select{grid-column:1/-1}.multi-hand{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:15px 0}
+@media(max-width:360px){.multi-join{grid-template-columns:1fr}.multi-join .game-action{margin-top:0}}
