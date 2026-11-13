@@ -161,8 +161,8 @@ async async function openVip(){
     <h2>${isAr?"ارتقِ بتجربتك في Gaming Hub":"Unlock more from Gaming Hub"}</h2>
     <p class="muted">${isAr?"عضوية تمنحك مزايا إضافية وتجربة لعب مميزة.":"A more rewarding way to play, with exclusive member benefits."}</p>
     <div class="vip-benefits">
-      <p>⭐ ${isAr?"تحديات VIP حصرية":"Exclusive VIP challenges"}</p>
-      <p>🎁 ${isAr?"مكافآت ونقاط إضافية":"Bonus points and special rewards"}</p>
+      <p>⭐ ${isAr?"نقاط إضافية بنسبة ٥٠٪ في كل لعبة":"50% extra points in every game"}</p>
+      <p>🎁 ${isAr?"شارة VIP ومكافآت خاصة":"VIP member badge and special rewards"}</p>
       <p>🚫 ${isAr?"إعلانات أقل":"Fewer advertisements"}</p>
       <p>🌟 ${isAr?"شارة العضوية المميزة":"VIP member status"}</p>
     </div>
@@ -188,7 +188,12 @@ async async function openVip(){
       tg.openInvoice(data.invoiceLink,async(status)=>{
         if(status==="paid"){
           pay.textContent=isAr?"تم الدفع، جارٍ تحديث العضوية…":"Payment received, refreshing membership…";
-          setTimeout(openVip,1000);
+          for(let attempt=0;attempt<5;attempt++){
+            await new Promise(resolve=>setTimeout(resolve,700));
+            const check=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg.initData}});
+            if(check.ok){const vip=await check.json();if(vip.active)break;}
+          }
+          await openVip();
         }else{
           pay.disabled=false;pay.textContent=isAr?"اشترك الآن · 100 ⭐":"Subscribe now · 100 ⭐";
           if(status==="failed")alert(isAr?"تعذر إتمام الدفع. حاول مجدداً.":"Payment failed. Please try again.");
