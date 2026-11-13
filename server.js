@@ -12,7 +12,7 @@ app.use(express.json({ limit: '32kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const token = process.env.BOT_TOKEN;
-const webAppUrl = process.env.WEBAPP_URL;
+const webAppUrl = process.env.WEBAPP_URL || "https://gaming-hub-0agm.onrender.com";
 const bot = token && process.env.BOT_ENABLED !== "false" ? new Telegraf(token) : null;
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
@@ -83,13 +83,13 @@ if (bot) {
   bot.start((ctx) => ctx.reply(
     'Welcome to Gaming Hub! / أهلاً بك في مركز الألعاب!',
     Markup.inlineKeyboard([
-      Markup.button.webApp('🎮 Play / العب', webAppUrl || 'https://example.com')
+      Markup.button.webApp('🎮 Play / العب', webAppUrl)
     ])
   ));
   bot.command('games', (ctx) => ctx.reply(
     'Open the game hub / افتح مركز الألعاب',
     Markup.inlineKeyboard([
-      Markup.button.webApp('🚀 Open Games / افتح الألعاب', webAppUrl || 'https://example.com')
+      Markup.button.webApp('🚀 Open Games / افتح الألعاب', webAppUrl)
     ])
   ));
 }
@@ -149,13 +149,16 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
   try {
     const user = req.telegramUser;
     const result = await pool.query(
-      `UPDATE players
-       SET points = points + $2, updated_at = NOW()
-       WHERE telegram_id = $1
+      `INSERT INTO players (telegram_id, username, first_name, points)
+       VALUES ($1, $3, $4, 120 + $2)
+       ON CONFLICT (telegram_id) DO UPDATE
+       SET points = players.points + $2,
+           username = EXCLUDED.username,
+           first_name = EXCLUDED.first_name,
+           updated_at = NOW()
        RETURNING points`,
-      [String(user.id), reward]
+      [String(user.id), reward, user.username || null, user.first_name || null]
     );
-    if (!result.rowCount) return res.status(404).json({ error: 'Player profile not found. Reopen the game and try again.' });
     res.json({ accepted: true, awarded: reward, points: result.rows[0].points });
   } catch (error) {
     console.error('Could not save score:', error);
