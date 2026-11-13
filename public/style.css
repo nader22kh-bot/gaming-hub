@@ -32,3 +32,36 @@ button:disabled{opacity:.55;cursor:wait}
 .player{animation:heroRise .35s ease both}
 .rtl .vip-price{flex-direction:row-reverse}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Gaming Hub motion refresh */
+html{scroll-behavior:smooth}
+body{background:radial-gradient(ellipse at 12% 8%,#29235a 0,transparent 34%),radial-gradient(ellipse at 92% 28%,#123e50 0,transparent 30%),#090f1d;background-size:140% 140%;animation:ambientShift 18s ease-in-out infinite alternate}
+@keyframes ambientShift{0%{background-position:0% 0%,100% 20%,center}100%{background-position:55% 40%,35% 80%,center}}
+.hero{box-shadow:0 18px 50px #05081766;animation:heroEnter .8s cubic-bezier(.2,.8,.2,1) both}
+.hero:after{content:"";position:absolute;width:210px;height:210px;border:1px solid #ffffff22;border-radius:50%;right:-70px;top:-85px;box-shadow:0 0 0 22px #ffffff08,0 0 0 48px #ffffff06;animation:orbit 16s linear infinite}
+.hero-art{animation:floatGame 4s ease-in-out infinite}
+.stats div,.game-card,.vip-card{transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease}
+.stats div:hover,.game-card:hover{transform:translateY(-5px);border-color:#8974e9;box-shadow:0 12px 28px #05081755}
+.game-card{animation:cardEnter .55s both}
+.game-card:nth-child(2){animation-delay:.06s}.game-card:nth-child(3){animation-delay:.12s}.game-card:nth-child(4){animation-delay:.18s}.game-card:nth-child(5){animation-delay:.24s}
+.game-card:active,.primary:active,.vip-card button:active{transform:scale(.97)}
+.vip-card{box-shadow:0 12px 35px #5e42bd33;position:relative;overflow:hidden}
+.vip-card:before{content:"";position:absolute;inset:-80% auto auto -35%;width:65%;height:240%;background:linear-gradient(90deg,transparent,#ffffff18,transparent);transform:rotate(25deg);animation:shine 7s ease-in-out infinite}
+.vip-card>*{position:relative;z-index:1}
+.modal-card{animation:modalEnter .28s cubic-bezier(.2,.8,.2,1) both;box-shadow:0 25px 80px #0009}
+.vip-benefits{padding:8px 13px;border:1px solid #ffffff18;border-radius:15px;background:#ffffff08;margin:16px 0}
+.vip-benefits p{font-size:13px;margin:12px 0}
+.vip-price{display:flex;align-items:baseline;gap:7px;margin:18px 0 4px}
+.vip-price strong{font-size:30px;color:#ffe18a}.vip-price span{font-size:12px;color:#aebbd1}
+.vip-pay{background:linear-gradient(100deg,#9b77ff,#6e52d8);box-shadow:0 8px 25px #7554df55;text-align:center}
+.vip-status{padding:13px;border-radius:12px;background:#123c32;color:#8cf0c3;font-weight:800;margin:15px 0}
+.vip-secondary{width:100%;border:1px solid #3a4966;border-radius:12px;background:transparent;color:#c4cde0;padding:11px;margin-top:8px}
+button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
+.player{animation:cardEnter .4s both}
+@keyframes floatGame{0%,100%{transform:translateY(0) rotate(-9deg)}50%{transform:translateY(-11px) rotate(-5deg)}}
+@keyframes orbit{to{transform:rotate(360deg)}}
+@keyframes shine{0%,65%,100%{left:-75%}35%{left:130%}}
+@keyframes heroEnter{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes cardEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes modalEnter{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
