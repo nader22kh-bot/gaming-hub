@@ -123,7 +123,13 @@ async function startVipPayment(){
     if(tg?.openInvoice){
       tg.openInvoice(data.invoiceLink,async status=>{
         if(status==="paid"){
-          showModal(`<div class="vip-modal"><h2>🎉 ${lang==="en"?"Welcome to VIP!":"أهلاً بك في VIP!"}</h2><p class="muted">${lang==="en"?"Telegram confirmed your payment. Your membership is being activated.":"أكد تيليجرام الدفع. جارٍ تفعيل عضويتك."}</p><button class="game-action" id="vipDone">${t("close")}</button></div>`);
+          let activeStatus=null;
+          for(let attempt=0;attempt<5;attempt++){
+            await new Promise(resolve=>setTimeout(resolve,700));
+            const check=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg?.initData||""}});
+            if(check.ok){activeStatus=await check.json();if(activeStatus.active)break;}
+          }
+          showModal(`<div class="vip-modal"><h2>🎉 ${lang==="en"?"Welcome to VIP!":"أهلاً بك في VIP!"}</h2><p class="muted">${activeStatus?.active?(lang==="en"?"Telegram confirmed your payment. VIP is now active.":"أكد تيليجرام الدفع وتم تفعيل VIP."):(lang==="en"?"Telegram confirmed the payment. Membership activation may take a few seconds; reopen VIP to refresh.":"أكد تيليجرام الدفع. قد يستغرق التفعيل بضع ثوانٍ؛ افتح VIP مجدداً لتحديث الحالة.")}</p><button class="game-action" id="vipDone">${t("close")}</button></div>`);
           $("vipDone").onclick=async()=>{closeModal();await openVip();};
         }else if(status==="failed"||status==="cancelled"){
           showModal(`<h2>${lang==="en"?"Payment not completed":"لم تكتمل عملية الدفع"}</h2><p class="muted">${lang==="en"?"No charge was confirmed. You can try again whenever you're ready.":"لم يتم تأكيد أي عملية خصم. يمكنك المحاولة مرة أخرى متى شئت."}</p><button class="game-action" id="vipRetry">${lang==="en"?"Try again":"حاول مجدداً"}</button>`);
@@ -203,7 +209,19 @@ $("gameModal").onclick=e=>{if(e.target===$("gameModal"))closeModal()};
 $("gamesNav").onclick=()=>document.getElementById("gamesGrid").scrollIntoView({behavior:"smooth"});
 $("rankNav").onclick=()=>document.querySelector(".leaderboard").scrollIntoView({behavior:"smooth"});
 $("profileNav").onclick=()=>showModal(`<h2>👤 ${t("profile")}</h2><p class="muted">${lang==="en"?"Player":"اللاعب"}: ${tg?.initDataUnsafe?.user?.first_name || "Guest"}</p><p>${t("points")}: <b>${points}</b></p>`);
+async function loadVipStatus(){
+  if(!tg?.initData)return;
+  try{
+    const response=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg.initData}});
+    if(!response.ok)return;
+    const data=await response.json();
+    document.body.classList.toggle("vip-member",Boolean(data.active));
+    const ad=document.querySelector(".ad-slot");
+    if(ad)ad.hidden=Boolean(data.active);
+  }catch(error){console.warn("VIP status check failed",error);}
+}
 setLang("en");
 loadProfile();
 loadLeaderboard();
+loadVipStatus();
 if(tg?.initDataUnsafe?.user?.first_name){$("welcome").textContent=`Hi, ${tg.initDataUnsafe.user.first_name}!`;}
