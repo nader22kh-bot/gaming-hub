@@ -113,40 +113,7 @@ function startPuzzle(){showModal(`<h2>🔢 ${t("puzzle")}</h2><p>${t("puzzleInfo
 function startWord(){const rounds=[{word:"PLANET",scramble:"T E N A P L",hint:"A world orbiting a star",ar:"كوكب يدور حول نجم"},{word:"OCEAN",scramble:"N C E O A",hint:"A very large body of salt water",ar:"مسطح مائي مالح واسع"},{word:"HEART",scramble:"R A E H T",hint:"It pumps blood",ar:"يضخ الدم في الجسم"},{word:"APPLE",scramble:"P L E A P",hint:"A common fruit",ar:"فاكهة مشهورة"}];let index=0;function show(){const item=rounds[index];showModal(`<h2>🔤 ${lang==="en"?"Word Scramble":"رتّب الحروف"}</h2><p class="muted">${lang==="en"?"Unscramble the letters":"رتّب الحروف لتكوين الكلمة"} · ${index+1}/${rounds.length}</p><div class="big-number">${item.scramble}</div><p class="muted">${lang==="en"?item.hint:item.ar}</p><input id="wordGuess" class="answer" autocomplete="off" placeholder="${lang==="en"?"Your answer":"إجابتك"}"><p id="wordFeedback" class="muted"></p><button class="game-action" id="wordSubmit">${lang==="en"?"Check answer":"تحقق من الإجابة"}</button>`);$("wordSubmit").onclick=async()=>{const guess=$("wordGuess").value.trim().toUpperCase();if(guess===item.word){$("wordSubmit").disabled=true;await addPoints("word_correct");index++;if(index===rounds.length)showModal(`<h2>🏆 ${t("done")}</h2><p>${lang==="en"?"You solved all words!":"أكملت جميع الكلمات!"}</p>`);else show()}else $("wordFeedback").textContent=lang==="en"?"Not quite. Try again!":"ليست صحيحة، حاول مجدداً";};}show()}
 async function loadLeaderboard(){const box=$("leaderboardRows");if(!box)return;try{const response=await fetch("/api/leaderboard",{headers:{"X-Telegram-Init-Data":tg?.initData || ""}});const data=await response.json();if(!response.ok)throw new Error("Leaderboard unavailable");box.innerHTML=data.players.length?data.players.map((p,i)=>`<div class="player"><span class="place ${i===0?"gold":i===1?"silver":i===2?"bronze":""}">${i+1}</span><span class="avatar">${["🏆","🎮","⭐","🚀","🧠"][i%5]}</span><b>${escapeHtml(p.name||"Player")}</b><strong>${Number(p.points).toLocaleString()}</strong></div>`).join(""):`<p class="muted">${lang==="en"?"Be the first to score!":"كن أول من يجمع النقاط!"}</p>`;const me=data.players.findIndex(p=>p.isMe);$("rankValue").textContent=me>=0?"#"+(me+1):"—";}catch(e){box.innerHTML='<p class="muted">Could not load rankings.</p>';}}
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-async function startVipPayment(){
-  const button=$("vipPay");
-  if(button){button.disabled=true;button.textContent=lang==="en"?"Preparing secure payment…":"جارٍ تجهيز الدفع الآمن…";}
-  try{
-    const response=await fetch("/api/vip/invoice",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:"{}"});
-    const data=await response.json();
-    if(!response.ok)throw new Error(data.error||"Could not create payment");
-    if(tg?.openInvoice){
-      tg.openInvoice(data.invoiceLink,async status=>{
-        if(status==="paid"){
-          let activeStatus=null;
-          for(let attempt=0;attempt<5;attempt++){
-            await new Promise(resolve=>setTimeout(resolve,700));
-            const check=await fetch("/api/vip",{headers:{"X-Telegram-Init-Data":tg?.initData||""}});
-            if(check.ok){activeStatus=await check.json();if(activeStatus.active)break;}
-          }
-          showModal(`<div class="vip-modal"><h2>🎉 ${lang==="en"?"Welcome to VIP!":"أهلاً بك في VIP!"}</h2><p class="muted">${activeStatus?.active?(lang==="en"?"Telegram confirmed your payment. VIP is now active.":"أكد تيليجرام الدفع وتم تفعيل VIP."):(lang==="en"?"Telegram confirmed the payment. Membership activation may take a few seconds; reopen VIP to refresh.":"أكد تيليجرام الدفع. قد يستغرق التفعيل بضع ثوانٍ؛ افتح VIP مجدداً لتحديث الحالة.")}</p><button class="game-action" id="vipDone">${t("close")}</button></div>`);
-          $("vipDone").onclick=async()=>{closeModal();await openVip();};
-        }else if(status==="failed"||status==="cancelled"){
-          showModal(`<h2>${lang==="en"?"Payment not completed":"لم تكتمل عملية الدفع"}</h2><p class="muted">${lang==="en"?"No charge was confirmed. You can try again whenever you're ready.":"لم يتم تأكيد أي عملية خصم. يمكنك المحاولة مرة أخرى متى شئت."}</p><button class="game-action" id="vipRetry">${lang==="en"?"Try again":"حاول مجدداً"}</button>`);
-          $("vipRetry").onclick=startVipPayment;
-        }
-      });
-    }else{
-      window.open(data.invoiceLink,"_blank","noopener");
-    }
-  }catch(error){
-    showModal(`<h2>${lang==="en"?"Payment unavailable":"الدفع غير متاح"}</h2><p class="muted">${escapeHtml(error.message)}</p><button class="game-action" id="vipRetry">${lang==="en"?"Try again":"حاول مجدداً"}</button>`);
-    $("vipRetry").onclick=startVipPayment;
-  }finally{
-    if(button){button.disabled=false;button.textContent=lang==="en"?"Subscribe · 100 ⭐ / month":"اشترك · ١٠٠ ⭐ شهرياً";}
-  }
-}
-async async function openVip(){
+async function openVip(){
   const isAr=lang==="ar";
   let membership={active:false,expiresAt:null,priceStars:100,periodDays:30};
   if(tg?.initData){
