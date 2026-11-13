@@ -355,6 +355,37 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+app.post('/api/adsgram/reward', requireTelegramUser, async (req,res) => {
+  const claimId=String(req.body?.claimId||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(claimId)){
+    return res.status(400).json({error:'Invalid reward claim.'});
+  }
+  const user=req.telegramUser, userId=String(user.id), client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    await client.query(
+      'INSERT INTO players (telegram_id,username,first_name,points) VALUES ($1,$2,$3,120) ON CONFLICT (telegram_id) DO NOTHING',
+      [userId,user.username||null,user.first_name||null]
+    );
+    const player=await client.query('SELECT points FROM players WHERE telegram_id=$1 FOR UPDATE',[userId]);
+    const vip=await client.query("SELECT expires_at FROM vip_subscriptions WHERE telegram_id=$1 AND status='active'",[userId]);
+    if(vip.rows[0]&&new Date(vip.rows[0].expires_at)>new Date()){
+      await client.query('ROLLBACK');return res.status(403).json({error:'VIP members do not need to watch ads.'});
+    }
+    const duplicate=await client.query('SELECT 1 FROM adsgram_reward_claims WHERE claim_id=$1',[claimId]);
+    if(duplicate.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'This ad reward was already claimed.'});}
+    const daily=await client.query('SELECT COUNT(*)::int AS count FROM adsgram_reward_claims WHERE telegram_id=$1 AND claimed_on=CURRENT_DATE',[userId]);
+    if(daily.rows[0].count>=5){await client.query('ROLLBACK');return res.status(429).json({error:'Daily ad reward limit reached. Please try again tomorrow.'});}
+    const awarded=20;
+    await client.query('INSERT INTO adsgram_reward_claims (claim_id,telegram_id,awarded) VALUES ($1,$2,$3)',[claimId,userId,awarded]);
+    const updated=await client.query('UPDATE players SET points=points+$2,username=$3,first_name=$4,updated_at=NOW() WHERE telegram_id=$1 RETURNING points',[userId,awarded,user.username||null,user.first_name||null]);
+    await client.query('COMMIT');
+    res.json({accepted:true,awarded,points:updated.rows[0].points,dailyLimit:5});
+  }catch(error){
+    await client.query('ROLLBACK');console.error('AdsGram reward failed:',error);res.status(500).json({error:'Could not save ad reward.'});
+  }finally{client.release();}
+});
+
 app.post('/api/score', requireTelegramUser, async (req, res) => {
   const reward = rewards[req.body?.game];
   if (!reward) return res.status(400).json({ error: 'Unknown game reward.' });
@@ -443,6 +474,19 @@ async function start() {
       purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (telegram_id, item_id)
     )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS adsgram_reward_claims (
+      claim_id UUID PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      awarded INTEGER NOT NULL,
+      claimed_on DATE NOT NULL DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS adsgram_reward_claims_user_day_idx
+    ON adsgram_reward_claims (telegram_id, claimed_on)
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
