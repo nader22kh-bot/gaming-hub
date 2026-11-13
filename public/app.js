@@ -20,12 +20,47 @@ function t(k){return translations[lang][k] || k}
 function setLang(next){lang=next;document.documentElement.lang=lang;document.body.classList.toggle("rtl",lang==="ar");$("langBtn").textContent=lang==="en"?"العربية":"English";$("welcome").textContent=t("welcome");$("heroEyebrow").textContent=t("eyebrow");$("heroTitle").innerHTML=t("heroTitle");$("heroDesc").textContent=t("heroDesc");$("playNowText").textContent=t("playNow");$("pointsLabel").textContent=t("points");$("rankLabel").textContent=t("rank");$("streakLabel").textContent=t("streak");$("chooseLabel").textContent=t("choose");$("gamesTitle").textContent=t("games");$("adText").textContent=t("ad");$("vipTitle").textContent=t("vipTitle");$("vipDesc").textContent=t("vipDesc");$("vipBtn").firstChild.textContent=t("vipBtn")+" ";$("communityLabel").textContent=t("community");$("leaderTitle").textContent=t("leader");$("homeNav").textContent=t("home");$("gamesNavText").textContent=t("gamesNav");$("rankNavText").textContent=t("ranks");$("profileNavText").textContent=t("profile");document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=t(el.dataset.i18n));}
 function showModal(html){$("gameContent").innerHTML=html;$("gameModal").classList.remove("hidden")}
 function closeModal(){$("gameModal").classList.add("hidden")}
-function addPoints(n){points+=n;$("points").textContent=points}
+async function addPoints(game){
+  try {
+    const response = await fetch("/api/score", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData || ""},
+      body: JSON.stringify({game})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not save points");
+    points = data.points;
+    $("points").textContent = points;
+    return true;
+  } catch (error) {
+    console.error("Score save failed:", error);
+    const feedback = $("feedback") || $("puzzleFeedback");
+    if (feedback) feedback.textContent = error.message;
+    return false;
+  }
+}
+async function loadProfile(){
+  if (!tg?.initData) {
+    $("points").textContent = "—";
+    return;
+  }
+  try {
+    const response = await fetch("/api/me", {headers: {"X-Telegram-Init-Data": tg.initData}});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load profile");
+    points = data.points;
+    $("points").textContent = points;
+    if (data.firstName) $("welcome").textContent = "Hi, " + data.firstName + "!";
+  } catch (error) {
+    console.error("Profile load failed:", error);
+    $("points").textContent = "—";
+  }
+}
 function startQuiz(){quizIndex=0;renderQuestion()}
-function renderQuestion(){const q=questions[quizIndex%questions.length];const prompt=lang==="en"?q.q:q.ar;const opts=lang==="en"?q.a:q.opts;showModal(`<h2>🧠 ${t("quiz")}</h2><p class="muted">${quizIndex+1} / 10</p><h3>${prompt}</h3>${opts.map((x,i)=>`<button class="answer" data-answer="${i}">${x}</button>`).join("")}<p id="feedback" class="muted"></p>`);document.querySelectorAll("[data-answer]").forEach(b=>b.onclick=()=>{const ok=Number(b.dataset.answer)===q.correct;if(ok){addPoints(10);$("feedback").textContent=t("correct")}else{$("feedback").textContent=t("wrong")}setTimeout(()=>{quizIndex++;if(quizIndex>=10){showModal(`<h2>🏆 ${t("done")}</h2><p class="muted">${lang==="en"?"Your points":"نقاطك"}: ${points}</p><button class="game-action" id="again">${t("playAgain")}</button>`);$("again").onclick=startQuiz}else renderQuestion()},650)})}
-function startMemory(){const icons=["🍋","🍇","🍉","🍒","🍋","🍇","🍉","🍒"].sort(()=>Math.random()-.5);let open=[],matched=0,moves=0;showModal(`<h2>🧩 ${t("memory")}</h2><p class="muted">${t("memoryInfo")}</p><p class="muted">${t("moves")}: <b id="moves">0</b></p><div class="memory-grid">${icons.map((_,i)=>`<button class="answer mem" data-i="${i}">❔</button>`).join("")}</div>`);document.querySelectorAll(".mem").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(b.disabled||open.some(x=>x.i===i))return;b.textContent=icons[i];open.push({i,icon:icons[i],el:b});if(open.length===2){moves++;$("moves").textContent=moves;const pair=open[0].icon===open[1].icon;if(pair){open.forEach(x=>{x.el.disabled=true;x.el.textContent=x.icon});matched+=2;if(matched===8){addPoints(30);setTimeout(()=>showModal(`<h2>🎉 ${t("done")}</h2><p>${t("moves")}: ${moves}</p><p>${t("correct")}</p>`),350)}}else{const pairNow=[...open];setTimeout(()=>pairNow.forEach(x=>x.el.textContent="❔"),650)}open=[]}})}
-function startReaction(){showModal(`<h2>⚡ ${t("reaction")}</h2><p class="muted">${t("tapStart")}</p><button class="game-action" id="reactionArea">${t("wait")}</button>`);let ready=false,started=0,timer;const area=$("reactionArea");const delay=1200+Math.random()*2500;timer=setTimeout(()=>{ready=true;started=performance.now();area.textContent=t("tapNow");area.style.background="#16a36b"},delay);area.onclick=()=>{if(!ready){clearTimeout(timer);area.textContent=t("tooSoon");setTimeout(startReaction,900);return}const ms=Math.round(performance.now()-started);if(ms<500)addPoints(20);showModal(`<h2>⚡ ${t("yourTime")}</h2><div class="big-number">${ms} ms</div><p class="muted">${ms<250?"Lightning fast!":ms<400?"Great reflexes!":"Keep practicing!"}</p><button class="game-action" id="again">${t("playAgain")}</button>`);$("again").onclick=startReaction}}
-function startPuzzle(){showModal(`<h2>🔢 ${t("puzzle")}</h2><p>${t("puzzleInfo")}</p><div class="big-number">2 · 4 · 8 · 16 · ?</div>${[20,24,32,36].map(n=>`<button class="answer" data-num="${n}">${n}</button>`).join("")}<p id="puzzleFeedback" class="muted"></p>`);document.querySelectorAll("[data-num]").forEach(b=>b.onclick=()=>{if(+b.dataset.num===32){$("puzzleFeedback").textContent=t("correct");addPoints(10)}else $("puzzleFeedback").textContent=t("wrong")})}
+function renderQuestion(){const q=questions[quizIndex%questions.length];const prompt=lang==="en"?q.q:q.ar;const opts=lang==="en"?q.a:q.opts;showModal(`<h2>🧠 ${t("quiz")}</h2><p class="muted">${quizIndex+1} / 10</p><h3>${prompt}</h3>${opts.map((x,i)=>`<button class="answer" data-answer="${i}">${x}</button>`).join("")}<p id="feedback" class="muted"></p>`);document.querySelectorAll("[data-answer]").forEach(b=>b.onclick=async()=>{const ok=Number(b.dataset.answer)===q.correct;if(ok){await addPoints("quiz_correct");$("feedback").textContent=t("correct")}else{$("feedback").textContent=t("wrong")}setTimeout(()=>{quizIndex++;if(quizIndex>=10){showModal(`<h2>🏆 ${t("done")}</h2><p class="muted">${lang==="en"?"Your points":"نقاطك"}: ${points}</p><button class="game-action" id="again">${t("playAgain")}</button>`);$("again").onclick=startQuiz}else renderQuestion()},650)})}
+function startMemory(){const icons=["🍋","🍇","🍉","🍒","🍋","🍇","🍉","🍒"].sort(()=>Math.random()-.5);let open=[],matched=0,moves=0;showModal(`<h2>🧩 ${t("memory")}</h2><p class="muted">${t("memoryInfo")}</p><p class="muted">${t("moves")}: <b id="moves">0</b></p><div class="memory-grid">${icons.map((_,i)=>`<button class="answer mem" data-i="${i}">❔</button>`).join("")}</div>`);document.querySelectorAll(".mem").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(b.disabled||open.some(x=>x.i===i))return;b.textContent=icons[i];open.push({i,icon:icons[i],el:b});if(open.length===2){moves++;$("moves").textContent=moves;const pair=open[0].icon===open[1].icon;if(pair){open.forEach(x=>{x.el.disabled=true;x.el.textContent=x.icon});matched+=2;if(matched===8){await addPoints("memory_complete");setTimeout(()=>showModal(`<h2>🎉 ${t("done")}</h2><p>${t("moves")}: ${moves}</p><p>${t("correct")}</p>`),350)}}else{const pairNow=[...open];setTimeout(()=>pairNow.forEach(x=>x.el.textContent="❔"),650)}open=[]}})}
+function startReaction(){showModal(`<h2>⚡ ${t("reaction")}</h2><p class="muted">${t("tapStart")}</p><button class="game-action" id="reactionArea">${t("wait")}</button>`);let ready=false,started=0,timer;const area=$("reactionArea");const delay=1200+Math.random()*2500;timer=setTimeout(()=>{ready=true;started=performance.now();area.textContent=t("tapNow");area.style.background="#16a36b"},delay);area.onclick=()=>{if(!ready){clearTimeout(timer);area.textContent=t("tooSoon");setTimeout(startReaction,900);return}const ms=Math.round(performance.now()-started);if(ms<500)await addPoints("reaction_fast");showModal(`<h2>⚡ ${t("yourTime")}</h2><div class="big-number">${ms} ms</div><p class="muted">${ms<250?"Lightning fast!":ms<400?"Great reflexes!":"Keep practicing!"}</p><button class="game-action" id="again">${t("playAgain")}</button>`);$("again").onclick=startReaction}}
+function startPuzzle(){showModal(`<h2>🔢 ${t("puzzle")}</h2><p>${t("puzzleInfo")}</p><div class="big-number">2 · 4 · 8 · 16 · ?</div>${[20,24,32,36].map(n=>`<button class="answer" data-num="${n}">${n}</button>`).join("")}<p id="puzzleFeedback" class="muted"></p>`);document.querySelectorAll("[data-num]").forEach(b=>b.onclick=async()=>{if(+b.dataset.num===32){$("puzzleFeedback").textContent=t("correct");await addPoints("puzzle_correct")}else $("puzzleFeedback").textContent=t("wrong")})}
 function openVip(){showModal(`<h2>⭐ VIP CLUB</h2><p class="muted">${t("vipInfo")}</p><button class="game-action" disabled>${t("subscribe")}</button>`)}
 document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle}[b.dataset.game])());
 $("langBtn").onclick=()=>setLang(lang==="en"?"ar":"en");
@@ -37,4 +72,5 @@ $("gamesNav").onclick=()=>document.getElementById("gamesGrid").scrollIntoView({b
 $("rankNav").onclick=()=>document.querySelector(".leaderboard").scrollIntoView({behavior:"smooth"});
 $("profileNav").onclick=()=>showModal(`<h2>👤 ${t("profile")}</h2><p class="muted">${lang==="en"?"Player":"اللاعب"}: ${tg?.initDataUnsafe?.user?.first_name || "Guest"}</p><p>${t("points")}: <b>${points}</b></p>`);
 setLang("en");
+loadProfile();
 if(tg?.initDataUnsafe?.user?.first_name){$("welcome").textContent=`Hi, ${tg.initDataUnsafe.user.first_name}!`;}
