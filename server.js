@@ -319,6 +319,9 @@ async function start() {
                  last_charge_id = EXCLUDED.last_charge_id, updated_at = NOW()`,
             [userId, expiration, payment.telegram_payment_charge_id]
           );
+          if (invoice) {
+            await pool.query('DELETE FROM vip_pending_invoices WHERE payload = $1', [payment.invoice_payload]);
+          }
         }
         await ctx.reply('⭐ Your Gaming Hub VIP membership is active! / تم تفعيل عضوية VIP بنجاح.');
       } catch (error) {
