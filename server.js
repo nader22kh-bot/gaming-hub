@@ -80,6 +80,9 @@ const rewards = {
 };
 
 if (bot) {
+  bot.command('paysupport', (ctx) => ctx.reply(
+    'For VIP subscription or Stars payment support, send your Telegram username, payment date, and a short description. Never send passwords or login codes.'
+  ));
   bot.start((ctx) => ctx.reply(
     'Welcome to Gaming Hub! / أهلاً بك في مركز الألعاب!',
     Markup.inlineKeyboard([
@@ -93,6 +96,45 @@ if (bot) {
     ])
   ));
 }
+
+app.get('/api/vip', requireTelegramUser, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT status, expires_at FROM vip_subscriptions WHERE telegram_id = $1',
+      [String(req.telegramUser.id)]
+    );
+    const sub = result.rows[0];
+    const active = Boolean(sub && sub.status === 'active' && new Date(sub.expires_at) > new Date());
+    res.json({ active, expiresAt: active ? sub.expires_at : null, priceStars: 100, periodDays: 30 });
+  } catch (error) {
+    console.error('Could not load VIP status:', error);
+    res.status(500).json({ error: 'Could not load VIP status.' });
+  }
+});
+
+app.post('/api/vip/invoice', requireTelegramUser, async (req, res) => {
+  if (!bot) return res.status(503).json({ error: 'VIP payments are temporarily unavailable.' });
+  try {
+    const userId = String(req.telegramUser.id);
+    const payload = 'vip30:' + userId + ':' + crypto.randomUUID();
+    await pool.query(
+      'INSERT INTO vip_pending_invoices (payload, telegram_id, amount, currency) VALUES ($1, $2, 100, $3)',
+      [payload, userId, 'XTR']
+    );
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title: 'Gaming Hub VIP',
+      description: 'VIP membership for 30 days. Renews automatically every 30 days until cancelled.',
+      payload,
+      currency: 'XTR',
+      prices: [{ label: 'VIP - 30 days', amount: 100 }],
+      subscription_period: 2592000
+    });
+    res.json({ invoiceLink });
+  } catch (error) {
+    console.error('Could not create VIP invoice:', error);
+    res.status(500).json({ error: 'Could not create the VIP payment. Please try again.' });
+  }
+});
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -170,6 +212,35 @@ const port = Number(process.env.PORT || 3000);
 
 async function start() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS vip_pending_invoices (
+      payload TEXT PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      amount INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'XTR',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vip_payments (
+      telegram_payment_charge_id TEXT PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      payload TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+      paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vip_subscriptions (
+      telegram_id BIGINT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'inactive',
+      expires_at TIMESTAMPTZ,
+      last_charge_id TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
       telegram_id BIGINT PRIMARY KEY,
       username TEXT,
@@ -179,6 +250,74 @@ async function start() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  if (bot) {
+    bot.on('pre_checkout_query', async (ctx) => {
+      try {
+        const q = ctx.update.pre_checkout_query;
+        const pending = await pool.query(
+          'SELECT telegram_id, amount, currency FROM vip_pending_invoices WHERE payload = $1',
+          [q.invoice_payload]
+        );
+        const item = pending.rows[0];
+        const valid = item &&
+          String(item.telegram_id) === String(q.from.id) &&
+          item.amount === q.total_amount &&
+          item.currency === q.currency &&
+          q.currency === 'XTR';
+        await ctx.answerPreCheckoutQuery(Boolean(valid), valid ? undefined : 'This VIP invoice is no longer valid. Please create a new one.');
+      } catch (error) {
+        console.error('VIP pre-checkout failed:', error);
+        try { await ctx.answerPreCheckoutQuery(false, 'Could not verify this payment. Please try again.'); } catch {}
+      }
+    });
+
+    bot.on('message', async (ctx) => {
+      const payment = ctx.message?.successful_payment;
+      if (!payment) return;
+      try {
+        const userId = String(ctx.from.id);
+        const pending = await pool.query(
+          'SELECT telegram_id, amount, currency FROM vip_pending_invoices WHERE payload = $1',
+          [payment.invoice_payload]
+        );
+        const invoice = pending.rows[0];
+        if (!invoice ||
+            String(invoice.telegram_id) !== userId ||
+            payment.currency !== 'XTR' ||
+            payment.total_amount !== 100 ||
+            invoice.amount !== payment.total_amount) {
+          console.error('Rejected unmatched VIP payment update:', payment.telegram_payment_charge_id);
+          return;
+        }
+        const expiration = payment.subscription_expiration_date
+          ? new Date(payment.subscription_expiration_date * 1000)
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const saved = await pool.query(
+          `INSERT INTO vip_payments
+             (telegram_payment_charge_id, telegram_id, payload, amount, currency, is_recurring)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (telegram_payment_charge_id) DO NOTHING
+           RETURNING telegram_payment_charge_id`,
+          [payment.telegram_payment_charge_id, userId, payment.invoice_payload, payment.total_amount, payment.currency, Boolean(payment.is_recurring)]
+        );
+        if (saved.rowCount) {
+          await pool.query(
+            `INSERT INTO vip_subscriptions (telegram_id, status, expires_at, last_charge_id, updated_at)
+             VALUES ($1, 'active', $2, $3, NOW())
+             ON CONFLICT (telegram_id) DO UPDATE
+             SET status = 'active', expires_at = EXCLUDED.expires_at,
+                 last_charge_id = EXCLUDED.last_charge_id, updated_at = NOW()`,
+            [userId, expiration, payment.telegram_payment_charge_id]
+          );
+          await pool.query('DELETE FROM vip_pending_invoices WHERE payload = $1', [payment.invoice_payload]);
+        }
+        await ctx.reply('⭐ Your Gaming Hub VIP membership is active! / تم تفعيل عضوية VIP بنجاح.');
+      } catch (error) {
+        console.error('Could not record VIP payment:', error);
+      }
+    });
+  }
+
   app.listen(port, () => console.log(`Gaming Hub listening on port ${port}`));
   bot?.launch()
     .then(() => console.log('Telegram bot started'))
