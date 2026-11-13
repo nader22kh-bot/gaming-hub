@@ -132,7 +132,7 @@ app.post('/api/baloot/complete', requireTelegramUser, async (req,res)=>{
     RETURNING points`,
    [String(req.telegramUser.id),req.telegramUser.username||null,req.telegramUser.first_name||null]
   );
-  const next=Math.min(20,current+1);
+  const next=current+1;
   await client.query(
    `INSERT INTO baloot_progress (telegram_id,stage) VALUES ($1,$2)
     ON CONFLICT (telegram_id) DO UPDATE SET stage=EXCLUDED.stage,updated_at=NOW()`,
@@ -313,7 +313,7 @@ async function start() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS baloot_progress (
       telegram_id BIGINT PRIMARY KEY,
-      stage INTEGER NOT NULL DEFAULT 1 CHECK (stage BETWEEN 1 AND 20),
+      stage INTEGER NOT NULL DEFAULT 1 CHECK (stage BETWEEN 1 AND 21),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
