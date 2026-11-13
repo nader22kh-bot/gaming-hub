@@ -302,26 +302,36 @@ async function start() {
         const expiration = payment.subscription_expiration_date
           ? new Date(payment.subscription_expiration_date * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        const saved = await pool.query(
-          `INSERT INTO vip_payments
-             (telegram_payment_charge_id, telegram_id, payload, amount, currency, is_recurring)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (telegram_payment_charge_id) DO NOTHING
-           RETURNING telegram_payment_charge_id`,
-          [payment.telegram_payment_charge_id, userId, payment.invoice_payload, payment.total_amount, payment.currency, Boolean(payment.is_recurring)]
-        );
-        if (saved.rowCount) {
-          await pool.query(
-            `INSERT INTO vip_subscriptions (telegram_id, status, expires_at, last_charge_id, updated_at)
-             VALUES ($1, 'active', $2, $3, NOW())
-             ON CONFLICT (telegram_id) DO UPDATE
-             SET status = 'active', expires_at = GREATEST(COALESCE(vip_subscriptions.expires_at, EXCLUDED.expires_at), EXCLUDED.expires_at),
-                 last_charge_id = EXCLUDED.last_charge_id, updated_at = NOW()`,
-            [userId, expiration, payment.telegram_payment_charge_id]
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const saved = await client.query(
+            `INSERT INTO vip_payments
+               (telegram_payment_charge_id, telegram_id, payload, amount, currency, is_recurring)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (telegram_payment_charge_id) DO NOTHING
+             RETURNING telegram_payment_charge_id`,
+            [payment.telegram_payment_charge_id, userId, payment.invoice_payload, payment.total_amount, payment.currency, Boolean(payment.is_recurring)]
           );
-          if (invoice) {
-            await pool.query('DELETE FROM vip_pending_invoices WHERE payload = $1', [payment.invoice_payload]);
+          if (saved.rowCount) {
+            await client.query(
+              `INSERT INTO vip_subscriptions (telegram_id, status, expires_at, last_charge_id, updated_at)
+               VALUES ($1, 'active', $2, $3, NOW())
+               ON CONFLICT (telegram_id) DO UPDATE
+               SET status = 'active', expires_at = GREATEST(COALESCE(vip_subscriptions.expires_at, EXCLUDED.expires_at), EXCLUDED.expires_at),
+                   last_charge_id = EXCLUDED.last_charge_id, updated_at = NOW()`,
+              [userId, expiration, payment.telegram_payment_charge_id]
+            );
+            if (invoice) {
+              await client.query('DELETE FROM vip_pending_invoices WHERE payload = $1', [payment.invoice_payload]);
+            }
           }
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
         }
         await ctx.reply('⭐ Your Gaming Hub VIP membership is active! / تم تفعيل عضوية VIP بنجاح.');
       } catch (error) {
