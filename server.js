@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import { Telegraf, Markup } from 'telegraf';
+import { createMatch, applyMatchAction, publicMatchState } from './baloot-engine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -161,6 +162,112 @@ app.post('/api/baloot/shop', requireTelegramUser, async (req,res)=>{
  }catch(e){await client.query('ROLLBACK');console.error('Baloot purchase failed',e);res.status(500).json({error:'Could not complete purchase.'});}
  finally{client.release();}
 });
+
+const roomCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function makeRoomCode() {
+  return Array.from({ length: 6 }, () => roomCodeAlphabet[crypto.randomInt(roomCodeAlphabet.length)]).join("");
+}
+function roomError(res, error) {
+  const message = error?.message || "Baloot room action failed.";
+  const status = /not seated|not your turn|already|full|complete|follow suit|valid|choose|four/i.test(message) ? 409 : 400;
+  return res.status(status).json({ error: message });
+}
+function roomView(state, viewerId) {
+  if (state.phase === "lobby") return {
+    phase: "lobby", code: state.code, hostId: state.hostId,
+    seats: state.seats.map(p => p ? { userId:p.userId, name:p.name, seat:p.seat, ready:p.ready } : null)
+  };
+  return { ...publicMatchState(state, viewerId), code: state.code };
+}
+app.post('/api/baloot/rooms', requireTelegramUser, async (req,res)=>{
+  const user=req.telegramUser, id=String(user.id);
+  try {
+    let code, inserted=false;
+    for(let attempt=0;attempt<5&&!inserted;attempt++){
+      code=makeRoomCode();
+      const state={phase:"lobby",code,hostId:id,seats:[{userId:id,name:user.first_name||user.username||"Player",seat:0,ready:true},null,null,null]};
+      const result=await pool.query(
+        "INSERT INTO baloot_rooms (room_code,host_id,state) VALUES ($1,$2,$3::jsonb) ON CONFLICT (room_code) DO NOTHING RETURNING room_code",
+        [code,id,JSON.stringify(state)]
+      );
+      inserted=result.rowCount===1;
+    }
+    if(!inserted) return res.status(503).json({error:"Could not create a private table. Try again."});
+    const result=await pool.query("SELECT state FROM baloot_rooms WHERE room_code=$1",[code]);
+    res.status(201).json({room:roomView(result.rows[0].state,id)});
+  } catch(e){console.error("Baloot room create failed",e);res.status(500).json({error:"Could not create a private table."});}
+});
+app.post('/api/baloot/rooms/:code/join', requireTelegramUser, async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase(), user=req.telegramUser, id=String(user.id);
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const row=await client.query("SELECT state FROM baloot_rooms WHERE room_code=$1 FOR UPDATE",[code]);
+    if(!row.rowCount) throw new Error("Room code not found.");
+    const state=row.rows[0].state;
+    if(state.phase!=="lobby") throw new Error("This match has already started.");
+    if(state.seats.some(p=>p?.userId===id)){await client.query("COMMIT");return res.json({room:roomView(state,id)});}
+    const seat=state.seats.findIndex(p=>p===null);
+    if(seat<0) throw new Error("This table is full.");
+    state.seats[seat]={userId:id,name:user.first_name||user.username||"Player",seat,ready:false};
+    await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(state)]);
+    await client.query("COMMIT");
+    res.json({room:roomView(state,id)});
+  }catch(e){await client.query("ROLLBACK");roomError(res,e);}
+  finally{client.release();}
+});
+app.get('/api/baloot/rooms/:code', requireTelegramUser, async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase(), id=String(req.telegramUser.id);
+  try{
+    const row=await pool.query("SELECT state FROM baloot_rooms WHERE room_code=$1",[code]);
+    if(!row.rowCount) return res.status(404).json({error:"Room code not found."});
+    const state=row.rows[0].state;
+    if(!state.seats.some(p=>p?.userId===id)) return res.status(403).json({error:"You are not seated at this private table."});
+    res.json({room:roomView(state,id)});
+  }catch(e){console.error("Baloot room load failed",e);res.status(500).json({error:"Could not load this table."});}
+});
+app.post('/api/baloot/rooms/:code/ready', requireTelegramUser, async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase(), id=String(req.telegramUser.id);
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const row=await client.query("SELECT state FROM baloot_rooms WHERE room_code=$1 FOR UPDATE",[code]);
+    if(!row.rowCount) throw new Error("Room code not found.");
+    let state=row.rows[0].state;
+    if(state.phase!=="lobby") throw new Error("The match has already started.");
+    const seat=state.seats.findIndex(p=>p?.userId===id);
+    if(seat<0) throw new Error("You are not seated at this table.");
+    state.seats[seat].ready=Boolean(req.body?.ready);
+    if(state.seats.every(Boolean)&&state.seats.every(p=>p.ready)){
+      const match=createMatch(state.seats.map(p=>({userId:p.userId,name:p.name})));
+      state={...match,code,hostId:state.hostId};
+    }
+    await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(state)]);
+    await client.query("COMMIT");
+    res.json({room:roomView(state,id)});
+  }catch(e){await client.query("ROLLBACK");roomError(res,e);}
+  finally{client.release();}
+});
+app.post('/api/baloot/rooms/:code/action', requireTelegramUser, async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase(), id=String(req.telegramUser.id);
+  const actionId=String(req.body?.actionId||"");
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const row=await client.query("SELECT state FROM baloot_rooms WHERE room_code=$1 FOR UPDATE",[code]);
+    if(!row.rowCount) throw new Error("Room code not found.");
+    const current=row.rows[0].state;
+    if(current.phase==="lobby") throw new Error("Wait until all four players are ready.");
+    const result=applyMatchAction(current,id,req.body?.action,actionId);
+    if(!result.duplicate){
+      await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(result.state)]);
+    }
+    await client.query("COMMIT");
+    res.json({room:roomView(result.state,id),duplicate:result.duplicate,event:result.event});
+  }catch(e){await client.query("ROLLBACK");roomError(res,e);}
+  finally{client.release();}
+});
+
 app.get('/api/vip', requireTelegramUser, async (req, res) => {
   try {
     const result = await pool.query(
