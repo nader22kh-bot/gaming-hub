@@ -65,3 +65,18 @@ button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
 @keyframes cardEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes modalEnter{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* Baloot stages and rewards */
+.game-card.baloot{background:linear-gradient(145deg,#154d45,#102d37);border-color:#397b69}
+.baloot-screen{color:#f4f4f7}.baloot-top{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:#a8e5cf;font-weight:800}
+.baloot-stage{padding:16px;border-radius:16px;background:#153d37;border:1px solid #3c7d68;margin:18px 0}
+.baloot-stage small{display:block;color:#a9c9be;font-size:10px}.baloot-stage strong{font-size:30px;display:block;margin:5px 0}
+.stage-track{height:7px;background:#304a45;border-radius:8px;overflow:hidden}.stage-track i{height:100%;display:block;background:linear-gradient(90deg,#54d6a5,#f2d17a);border-radius:8px}
+.baloot-reward{padding:12px;border-radius:12px;background:#392e19;color:#f5d88d;margin:12px 0;font-size:12px}
+.baloot-score{text-align:center;margin:14px;color:#b8e9d3}
+.baloot-hand{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin:22px 0}
+.playing-card{width:54px;height:86px;border-radius:10px;background:linear-gradient(160deg,#fff,#e7eaf0);color:#1a2331;border:2px solid #d1d7e2;box-shadow:0 5px 12px #0005;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:7px;font-weight:900}
+.playing-card strong{font-size:26px}.playing-card small{font-size:16px;align-self:flex-start}.playing-card.red-card{color:#d63e54}
+.shop-item{display:flex;align-items:center;gap:10px;padding:12px;margin:9px 0;border-radius:13px;background:#1d2b40;border:1px solid #35465f}
+.shop-icon{font-size:25px}.shop-item span:nth-child(2){flex:1;text-align:left}.shop-item b,.shop-item small{display:block;font-size:12px}.shop-item small{color:#aebbd0;margin-top:4px}.shop-buy{background:#277b64;color:white;border:0;border-radius:9px;padding:9px 12px;font-size:11px}.shop-buy:disabled{background:#455365}
+.baloot-owned{font-size:11px;color:#aebbd0;margin-top:12px}
