@@ -418,6 +418,18 @@ async function start() {
     )
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS baloot_rooms (
+      room_code TEXT PRIMARY KEY,
+      host_id BIGINT NOT NULL,
+      state JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS baloot_rooms_updated_idx ON baloot_rooms (updated_at)
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS baloot_progress (
       telegram_id BIGINT PRIMARY KEY,
       stage INTEGER NOT NULL DEFAULT 1 CHECK (stage BETWEEN 1 AND 21),
