@@ -168,7 +168,7 @@ export function publicMatchState(state, viewerId) {
     teamTricks: state.teamTricks, round: state.round, targetScore: state.targetScore,
     matchPoints: state.matchPoints, roundResult: state.roundResult || null,
     seats: state.seats.map(p => ({
-      userId: p.userId, name: p.name, seat: p.seat, ready: p.ready,
+      name: p.name, seat: p.seat, ready: p.ready, isMe: p.userId === String(viewerId),
       cardsCount: p.hand.length, hand: p.userId === String(viewerId) ? p.hand : undefined
     }))
   };
