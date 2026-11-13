@@ -305,11 +305,10 @@ async function start() {
             `INSERT INTO vip_subscriptions (telegram_id, status, expires_at, last_charge_id, updated_at)
              VALUES ($1, 'active', $2, $3, NOW())
              ON CONFLICT (telegram_id) DO UPDATE
-             SET status = 'active', expires_at = EXCLUDED.expires_at,
+             SET status = 'active', expires_at = GREATEST(COALESCE(vip_subscriptions.expires_at, EXCLUDED.expires_at), EXCLUDED.expires_at),
                  last_charge_id = EXCLUDED.last_charge_id, updated_at = NOW()`,
             [userId, expiration, payment.telegram_payment_charge_id]
           );
-          await pool.query('DELETE FROM vip_pending_invoices WHERE payload = $1', [payment.invoice_payload]);
         }
         await ctx.reply('⭐ Your Gaming Hub VIP membership is active! / تم تفعيل عضوية VIP بنجاح.');
       } catch (error) {
