@@ -174,8 +174,8 @@ function roomError(res, error) {
 }
 function roomView(state, viewerId) {
   if (state.phase === "lobby") return {
-    phase: "lobby", code: state.code, hostId: state.hostId,
-    seats: state.seats.map(p => p ? { userId:p.userId, name:p.name, seat:p.seat, ready:p.ready } : null)
+    phase: "lobby", code: state.code,
+    seats: state.seats.map(p => p ? { name:p.name, seat:p.seat, ready:p.ready, isMe:p.userId===String(viewerId) } : null)
   };
   return { ...publicMatchState(state, viewerId), code: state.code };
 }
