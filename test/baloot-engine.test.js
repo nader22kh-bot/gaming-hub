@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeDeck, dealHands, legalCards, winningPlay, cardPoints, createMatch, applyMatchAction } from "../baloot-engine.js";
+import { makeDeck, dealHands, legalCards, winningPlay, cardPoints, contractTargetPoints, scoreRound, createMatch, applyMatchAction, publicMatchState } from "../baloot-engine.js";
 
 test("deck contains 32 unique cards and deals eight per player", () => {
   const deck = makeDeck(() => 0.5);
@@ -44,4 +44,23 @@ test("duplicate action ids do not apply twice", () => {
   const second=applyMatchAction(first.state,first.state.seats[first.state.currentSeat].userId,{type:"pass"},"same-id");
   assert.equal(second.duplicate,true);
   assert.equal(second.state.bidHistory.length,1);
+});
+
+test("Sun and Hokom contract targets use their respective card-point totals", () => {
+  assert.equal(contractTargetPoints("sun"), 65);
+  assert.equal(contractTargetPoints("hokom"), 81);
+  assert.equal(scoreRound([66,64],{type:"sun",team:0}).made,true);
+  assert.equal(scoreRound([80,82],{type:"hokom",team:0}).made,false);
+});
+test("reconnecting player receives their hand but not opponents' cards", () => {
+  const match=createMatch([1,2,3,4].map(userId=>({userId})),()=>0.4);
+  const view=publicMatchState(match,"1");
+  assert.equal(view.seats[0].hand.length,8);
+  assert.equal(view.seats[1].hand,undefined);
+  assert.equal(view.currentSeat,match.currentSeat);
+});
+test("serialized competing moves reject the stale second turn", () => {
+  const match=createMatch([1,2,3,4].map(userId=>({userId})),()=>0.4);
+  const first=applyMatchAction(match,match.seats[match.currentSeat].userId,{type:"pass"},"move-one");
+  assert.throws(()=>applyMatchAction(first.state,match.seats[match.currentSeat].userId,{type:"pass"},"move-two"),/not your turn/);
 });
