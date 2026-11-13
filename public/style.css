@@ -95,3 +95,5 @@ button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
 .multi-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.multi-controls .answer{margin:0;text-align:center}
 .multi-controls select{grid-column:1/-1}.multi-hand{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:15px 0}
 @media(max-width:360px){.multi-join{grid-template-columns:1fr}.multi-join .game-action{margin-top:0}}
+
+.ad-slot .game-action{max-width:260px;margin:12px auto 4px;padding:11px 14px;text-align:center}.ad-slot .game-action:disabled{opacity:.6}.ad-slot #adFeedback{display:block;margin-top:6px;font-size:10px}
