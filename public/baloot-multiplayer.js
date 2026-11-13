@@ -43,7 +43,7 @@
     lastState=room;code=room.code;if(!timer)timer=setInterval(refresh,1600);
     if(room.phase==="lobby"){
       const seats=room.seats.map((p,i)=>`<div class="multi-seat"><span class="multi-seat-no">${i+1}</span><span>${p?escape(p.name):t("Waiting for player…","بانتظار لاعب…")}</span><b class="${p?.ready?"ready":""}">${p?(p.ready?t("Ready ✓","جاهز ✓"):t("Not ready","غير جاهز")):"—"}</b></div>`).join("");
-      const me=room.seats.find(p=>p?.userId===String(tg?.initDataUnsafe?.user?.id));
+      const me=room.seats.find(p=>p?.isMe);
       const invite="https://t.me/GamingHub2026Bot?startapp=baloot_"+code;
       modal(`<div class="multi-baloot"><div class="baloot-top"><span>🔒 ${t("PRIVATE TABLE","طاولة خاصة")}</span><span>${room.seats.filter(Boolean).length}/4</span></div>
         <h2>${t("Room","الطاولة")} · <strong class="room-code">${code}</strong></h2>
@@ -59,7 +59,7 @@
   }
   function renderGame(room){
     const me=String(tg?.initDataUnsafe?.user?.id||"");
-    const mySeat=room.seats.find(p=>p.userId===me);
+    const mySeat=room.seats.find(p=>p.isMe);
     const myTurn=mySeat&&room.currentSeat===mySeat.seat;
     const seats=room.seats.map(p=>`<div class="multi-seat ${room.currentSeat===p.seat?"active-turn":""}"><span>${p.seat+1}. ${escape(p.name)}</span><b>${p.cardsCount} 🂠</b></div>`).join("");
     const trick=room.trick?.length?room.trick.map(p=>`<span class="trick-card">${p.seat+1}: ${cardLabel(p.card)}</span>`).join(""):t("Waiting for cards","بانتظار الأوراق");
