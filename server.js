@@ -123,6 +123,24 @@ app.get('/api/me', requireTelegramUser, async (req, res) => {
   }
 });
 
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const user = verifyTelegramInitData(req.get('X-Telegram-Init-Data'));
+    const result = await pool.query(
+      `SELECT telegram_id, username, first_name, points
+       FROM players ORDER BY points DESC, updated_at ASC LIMIT 50`
+    );
+    res.json({ players: result.rows.map(row => ({
+      name: row.username ? '@' + row.username : row.first_name || 'Player',
+      points: row.points,
+      isMe: Boolean(user && String(user.id) === String(row.telegram_id))
+    })) });
+  } catch (error) {
+    console.error('Could not load leaderboard:', error);
+    res.status(500).json({ error: 'Could not load leaderboard.' });
+  }
+});
+
 app.post('/api/score', requireTelegramUser, async (req, res) => {
   const reward = rewards[req.body?.game];
   if (!reward) return res.status(400).json({ error: 'Unknown game reward.' });
