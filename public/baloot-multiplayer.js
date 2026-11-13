@@ -20,6 +20,15 @@
   function err(e){const el=$("multiError");if(el)el.textContent=e.message;}
   function open(){
     stop();code=null;lastState=null;
+    const startParam=tg?.initDataUnsafe?.start_param||"";
+    if(startParam.startsWith("baloot_")){
+      const inviteCode=startParam.slice(7).toUpperCase();
+      if(/^[A-HJ-NP-Z2-9]{6}$/.test(inviteCode)){
+        code=inviteCode;
+        api("/api/baloot/rooms/"+code+"/join","POST",{}).then(d=>render(d.room)).catch(e=>{modal("<h2>Baloot</h2><p class='muted'>"+escape(e.message)+"</p>");});
+        return;
+      }
+    }
     modal(`<div class="multi-baloot"><div class="baloot-top"><span>🃏 BALOOT · MULTIPLAYER</span><span>4 PLAYERS</span></div>
       <h2>${t("Play with friends","العب مع أصدقائك")}</h2>
       <p class="muted">${t("Create a private table or join with a six-character invite code.","أنشئ طاولة خاصة أو انضم باستخدام رمز دعوة من 6 أحرف.")}</p>
