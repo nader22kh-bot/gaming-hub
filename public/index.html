@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#111827" />
   <title>Gaming Hub</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=daily-streak-20261114" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 </head>
@@ -28,7 +28,22 @@
     <section class="stats">
       <div><small id="pointsLabel">YOUR POINTS</small><strong id="points">120</strong></div>
       <div><small id="rankLabel">YOUR RANK</small><strong id="rankValue">—</strong></div>
-      <div><small id="streakLabel">STREAK</small><strong>🔥 3</strong></div>
+      <div><small id="streakLabel">STREAK</small><strong id="streakValue">—</strong></div>
+    </section>
+
+    <section class="streak-card" aria-live="polite">
+      <div class="streak-card-head">
+        <div><small id="streakEyebrow">YOUR DAILY STREAK</small><h2 id="streakTitle">Keep your streak alive</h2></div>
+        <span class="streak-flame">🔥</span>
+      </div>
+      <div class="streak-numbers">
+        <div><strong id="streakCount">—</strong><span id="streakDaysText">days in a row</span></div>
+        <div class="streak-best"><small id="streakBestLabel">BEST STREAK</small><b id="streakBest">—</b></div>
+      </div>
+      <div class="streak-week" id="streakWeek" aria-label="Last seven days">
+        <span class="streak-placeholder">—</span>
+      </div>
+      <p id="streakHint">Complete any game each day to continue your streak.</p>
     </section>
 
     <div class="section-head"><div><small id="chooseLabel">PICK YOUR MODE</small><h2 id="gamesTitle">Popular games</h2></div><span class="live">● LIVE</span></div>
@@ -60,6 +75,6 @@
     <div class="modal-card"><button class="close" id="closeModal">×</button><div id="gameContent"></div></div>
   </div>
   <script src="/baloot-multiplayer.js?v=20261114"></script>
-  <script src="/app.js?v=baloot-multiplayer-v2-20261114"></script>
+  <script src="/app.js?v=daily-streak-20261114"></script>
 </body>
 </html>
