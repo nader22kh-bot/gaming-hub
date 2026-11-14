@@ -34,7 +34,7 @@
     };
     cashBtn.onclick=async()=>{
       if(!running||banked)return;banked=true;const captured=factor;stop();
-      const reward=Math.max(5,Math.min(50,Math.floor((captured-1)*18)+5));
+      const reward=10;
       cashBtn.disabled=true;status.textContent=say("Cashed out safely! Saving your points…","تم السحب بنجاح! جارٍ حفظ نقاطك…");
       try{await score("crash_cashout");$("crashReward").textContent="+"+reward+" ⭐";status.textContent=say("Cash-out recorded! A fixed game reward was added.","تم تسجيل السحب وإضافة مكافأة اللعب.");}
       catch(e){status.textContent=e.message;}
