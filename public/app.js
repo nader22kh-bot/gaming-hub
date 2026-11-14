@@ -4,8 +4,8 @@ tg?.ready();
 tg?.expand();
 
 const translations = {
- en:{welcome:"Play. Compete. Win.",eyebrow:"YOUR DAILY PLAYGROUND",heroTitle:'Ready for a<br><em>challenge?</em>',heroDesc:"Play quick games, earn points and climb the leaderboard.",playNow:"Play now",points:"YOUR POINTS",rank:"YOUR RANK",streak:"STREAK",choose:"PICK YOUR MODE",games:"Popular games",quiz:"Brain Quiz",quizSub:"Think fast · 10 rounds",memory:"Memory Match",memorySub:"Train your memory",reaction:"Speed Tap",reactionSub:"Test your reflexes",puzzle:"Number Puzzle",puzzleSub:"Find the missing number",ad:"A small ad keeps the games free. VIP members enjoy an ad-light experience.",vipTitle:"Level up your game",vipDesc:"Exclusive challenges, bonus points and fewer ads.",vipBtn:"Explore VIP",community:"THE COMMUNITY",leader:"Top players",home:"Home",gamesNav:"Games",ranks:"Ranks",profile:"Profile",correct:"Correct! +10 points",wrong:"Not quite. Try again!",next:"Next question",done:"Great game!",close:"Close",tapStart:"Tap when the color turns green!",wait:"Wait for green…",tapNow:"TAP NOW!",tooSoon:"Too soon! Try again.",yourTime:"Your reaction time",playAgain:"Play again",moves:"Moves",vipInfo:"VIP includes exclusive game modes, bonus points and an ad-light experience. Payments are not enabled in this demo.",subscribe:"VIP subscription coming soon",memoryInfo:"Find matching pairs. This demo shows the game flow.",puzzleInfo:"What number comes next?",adLabel:"ADVERTISEMENT",adRewardBtn:"🎁 Watch an ad · +20 points"},
- ar:{welcome:"العب. نافس. اربح.",eyebrow:"مساحتك اليومية للعب",heroTitle:'هل أنت مستعد<br><em>للتحدي؟</em>',heroDesc:"العب ألعاباً سريعة واجمع النقاط واصعد في لوحة المتصدرين.",playNow:"العب الآن",points:"نقاطك",rank:"ترتيبك",streak:"التتابع",choose:"اختر طريقة اللعب",games:"الألعاب الشائعة",quiz:"اختبار الذكاء",quizSub:"فكّر بسرعة · 10 جولات",memory:"تحدي الذاكرة",memorySub:"درّب ذاكرتك",reaction:"اختبار السرعة",reactionSub:"اختبر سرعة استجابتك",puzzle:"لغز الأرقام",puzzleSub:"اكتشف الرقم الناقص",ad:"إعلان بسيط يساعدنا على إبقاء الألعاب مجانية. أعضاء VIP يتمتعون بإعلانات أقل.",vipTitle:"ارتقِ بمستوى لعبك",vipDesc:"تحديات حصرية ونقاط إضافية وإعلانات أقل.",vipBtn:"اكتشف VIP",community:"مجتمع اللاعبين",leader:"أفضل اللاعبين",home:"الرئيسية",gamesNav:"الألعاب",ranks:"الترتيب",profile:"حسابي",correct:"إجابة صحيحة! +10 نقاط",wrong:"ليست الإجابة الصحيحة، حاول مجدداً!",next:"السؤال التالي",done:"أحسنت اللعب!",close:"إغلاق",tapStart:"اضغط عندما يتحول اللون إلى الأخضر!",wait:"انتظر اللون الأخضر…",tapNow:"اضغط الآن!",tooSoon:"ضغطت مبكراً! حاول مجدداً.",yourTime:"زمن الاستجابة",playAgain:"العب مجدداً",moves:"المحاولات",vipInfo:"تشمل VIP أنماط لعب حصرية ونقاطاً إضافية وتجربة بإعلانات أقل. الدفع غير مفعّل في هذه النسخة التجريبية.",subscribe:"اشتراك VIP قريباً",memoryInfo:"اعثر على الأزواج المتطابقة. هذه نسخة تجريبية لتجربة اللعب.",puzzleInfo:"ما الرقم التالي؟",adLabel:"إعلان",adRewardBtn:"🎁 شاهد إعلاناً واحصل على 20 نقطة"}
+ en:{welcome:"Play. Compete. Win.",eyebrow:"YOUR DAILY PLAYGROUND",heroTitle:'Ready for a<br><em>challenge?</em>',heroDesc:"Play quick games, earn points and climb the leaderboard.",playNow:"Play now",points:"YOUR POINTS",rank:"YOUR RANK",streak:"STREAK",streakEyebrow:"YOUR DAILY STREAK",streakTitle:"Keep your streak alive",streakDaysText:"days in a row",streakBestLabel:"BEST STREAK",streakHint:"Complete any game each day to continue your streak.",choose:"PICK YOUR MODE",games:"Popular games",quiz:"Brain Quiz",quizSub:"Think fast · 10 rounds",memory:"Memory Match",memorySub:"Train your memory",reaction:"Speed Tap",reactionSub:"Test your reflexes",puzzle:"Number Puzzle",puzzleSub:"Find the missing number",ad:"A small ad keeps the games free. VIP members enjoy an ad-light experience.",vipTitle:"Level up your game",vipDesc:"Exclusive challenges, bonus points and fewer ads.",vipBtn:"Explore VIP",community:"THE COMMUNITY",leader:"Top players",home:"Home",gamesNav:"Games",ranks:"Ranks",profile:"Profile",correct:"Correct! +10 points",wrong:"Not quite. Try again!",next:"Next question",done:"Great game!",close:"Close",tapStart:"Tap when the color turns green!",wait:"Wait for green…",tapNow:"TAP NOW!",tooSoon:"Too soon! Try again.",yourTime:"Your reaction time",playAgain:"Play again",moves:"Moves",vipInfo:"VIP includes exclusive game modes, bonus points and an ad-light experience. Payments are not enabled in this demo.",subscribe:"VIP subscription coming soon",memoryInfo:"Find matching pairs. This demo shows the game flow.",puzzleInfo:"What number comes next?",adLabel:"ADVERTISEMENT",adRewardBtn:"🎁 Watch an ad · +20 points"},
+ ar:{welcome:"العب. نافس. اربح.",eyebrow:"مساحتك اليومية للعب",heroTitle:'هل أنت مستعد<br><em>للتحدي؟</em>',heroDesc:"العب ألعاباً سريعة واجمع النقاط واصعد في لوحة المتصدرين.",playNow:"العب الآن",points:"نقاطك",rank:"ترتيبك",streak:"أيام اللعب",streakEyebrow:"سلسلة أيام اللعب",streakTitle:"حافظ على تتابعك",streakDaysText:"أيام متتالية",streakBestLabel:"أفضل سلسلة",streakHint:"أكمل لعبة واحدة كل يوم للحفاظ على سلسلة اللعب.",choose:"اختر طريقة اللعب",games:"الألعاب الشائعة",quiz:"اختبار الذكاء",quizSub:"فكّر بسرعة · 10 جولات",memory:"تحدي الذاكرة",memorySub:"درّب ذاكرتك",reaction:"اختبار السرعة",reactionSub:"اختبر سرعة استجابتك",puzzle:"لغز الأرقام",puzzleSub:"اكتشف الرقم الناقص",ad:"إعلان بسيط يساعدنا على إبقاء الألعاب مجانية. أعضاء VIP يتمتعون بإعلانات أقل.",vipTitle:"ارتقِ بمستوى لعبك",vipDesc:"تحديات حصرية ونقاط إضافية وإعلانات أقل.",vipBtn:"اكتشف VIP",community:"مجتمع اللاعبين",leader:"أفضل اللاعبين",home:"الرئيسية",gamesNav:"الألعاب",ranks:"الترتيب",profile:"حسابي",correct:"إجابة صحيحة! +10 نقاط",wrong:"ليست الإجابة الصحيحة، حاول مجدداً!",next:"السؤال التالي",done:"أحسنت اللعب!",close:"إغلاق",tapStart:"اضغط عندما يتحول اللون إلى الأخضر!",wait:"انتظر اللون الأخضر…",tapNow:"اضغط الآن!",tooSoon:"ضغطت مبكراً! حاول مجدداً.",yourTime:"زمن الاستجابة",playAgain:"العب مجدداً",moves:"المحاولات",vipInfo:"تشمل VIP أنماط لعب حصرية ونقاطاً إضافية وتجربة بإعلانات أقل. الدفع غير مفعّل في هذه النسخة التجريبية.",subscribe:"اشتراك VIP قريباً",memoryInfo:"اعثر على الأزواج المتطابقة. هذه نسخة تجريبية لتجربة اللعب.",puzzleInfo:"ما الرقم التالي؟",adLabel:"إعلان",adRewardBtn:"🎁 شاهد إعلاناً واحصل على 20 نقطة"}
 };
 let lang = "en";
 let points = 120;
@@ -66,7 +66,7 @@ const questions = [
 ];
 const $ = id => document.getElementById(id);
 function t(k){return translations[lang][k] || k}
-function setLang(next){lang=next;document.documentElement.lang=lang;document.body.classList.toggle("rtl",lang==="ar");$("langBtn").textContent=lang==="en"?"العربية":"English";$("welcome").textContent=t("welcome");$("heroEyebrow").textContent=t("eyebrow");$("heroTitle").innerHTML=t("heroTitle");$("heroDesc").textContent=t("heroDesc");$("playNowText").textContent=t("playNow");$("pointsLabel").textContent=t("points");$("rankLabel").textContent=t("rank");$("streakLabel").textContent=t("streak");$("chooseLabel").textContent=t("choose");$("gamesTitle").textContent=t("games");$("adText").textContent=t("ad");$("vipTitle").textContent=t("vipTitle");$("vipDesc").textContent=t("vipDesc");$("vipBtn").firstChild.textContent=t("vipBtn")+" ";$("communityLabel").textContent=t("community");$("leaderTitle").textContent=t("leader");$("homeNav").textContent=t("home");$("gamesNavText").textContent=t("gamesNav");$("rankNavText").textContent=t("ranks");$("profileNavText").textContent=t("profile");document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=t(el.dataset.i18n));const adButton=$("rewardAdBtn");if(adButton)adButton.textContent=t("adRewardBtn");}
+function setLang(next){lang=next;document.documentElement.lang=lang;document.body.classList.toggle("rtl",lang==="ar");$("langBtn").textContent=lang==="en"?"العربية":"English";$("welcome").textContent=t("welcome");$("heroEyebrow").textContent=t("eyebrow");$("heroTitle").innerHTML=t("heroTitle");$("heroDesc").textContent=t("heroDesc");$("playNowText").textContent=t("playNow");$("pointsLabel").textContent=t("points");$("rankLabel").textContent=t("rank");$("streakLabel").textContent=t("streak");$("streakEyebrow").textContent=t("streakEyebrow");$("streakTitle").textContent=t("streakTitle");$("streakDaysText").textContent=t("streakDaysText");$("streakBestLabel").textContent=t("streakBestLabel");$("streakHint").textContent=t("streakHint");$("chooseLabel").textContent=t("choose");$("gamesTitle").textContent=t("games");$("adText").textContent=t("ad");$("vipTitle").textContent=t("vipTitle");$("vipDesc").textContent=t("vipDesc");$("vipBtn").firstChild.textContent=t("vipBtn")+" ";$("communityLabel").textContent=t("community");$("leaderTitle").textContent=t("leader");$("homeNav").textContent=t("home");$("gamesNavText").textContent=t("gamesNav");$("rankNavText").textContent=t("ranks");$("profileNavText").textContent=t("profile");document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=t(el.dataset.i18n));const adButton=$("rewardAdBtn");if(adButton)adButton.textContent=t("adRewardBtn");}
 function showModal(html){$("gameContent").innerHTML=html;$("gameModal").classList.remove("hidden")}
 function closeModal(){$("gameModal").classList.add("hidden")}
 async function addPoints(game){
@@ -80,6 +80,7 @@ async function addPoints(game){
     if (!response.ok) throw new Error(data.error || "Could not save points");
     points = data.points;
     $("points").textContent = points;
+    await loadProfile();
     await loadLeaderboard();
     return true;
   } catch (error) {
@@ -115,6 +116,28 @@ async function showRewardedAd(){
   }finally{button.disabled=false;}
 }
 
+function renderStreak(streak){
+  if(!streak)return;
+  const current=Number(streak.current||0),best=Number(streak.longest||0);
+  $("streakValue").textContent=current;
+  $("streakCount").textContent=current;
+  $("streakBest").textContent=best;
+  const weekdays=lang==="ar"?["أحد","إثن","ثلا","أرب","خمي","جمع","سبت"]:["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const today=streak.today;
+  const todayDate=new Date(today+"T00:00:00Z");
+  const week=[];
+  for(let offset=6;offset>=0;offset--){
+    const d=new Date(todayDate.getTime()-offset*86400000);
+    const key=d.toISOString().slice(0,10);
+    const label=weekdays[d.getUTCDay()];
+    const done=(streak.weekDays||[]).includes(key);
+    week.push(`<div class="streak-day ${done?"done":""} ${key===today?"today":""}"><span>${label}</span><b>${done?"✓":key===today?"·":"—"}</b></div>`);
+  }
+  $("streakWeek").innerHTML=week.join("");
+  $("streakHint").textContent=current===0
+    ?(lang==="ar"?"ابدأ سلسلة جديدة اليوم بإكمال أي لعبة.":"Start a new streak today by completing any game.")
+    :(lang==="ar"?`أكملت اللعب ${Number(streak.totalDays||0)} يوماً إجمالاً. استمر غداً!`:`You've played on ${Number(streak.totalDays||0)} days in total. Come back tomorrow!`);
+}
 async function loadProfile(){
   if (!tg?.initData) {
     $("points").textContent = "—";
@@ -126,6 +149,7 @@ async function loadProfile(){
     if (!response.ok) throw new Error(data.error || "Could not load profile");
     points = data.points;
     $("points").textContent = points;
+    renderStreak(data.streak);
     if (data.firstName) $("welcome").textContent = "Hi, " + data.firstName + "!";
   } catch (error) {
     console.error("Profile load failed:", error);
