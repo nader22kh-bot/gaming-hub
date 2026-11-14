@@ -106,10 +106,19 @@ async function showRewardedAd(){
     const startData=await startResponse.json();
     if(!startResponse.ok)throw new Error(startData.error||"Could not start ad.");
     ymid=startData.ymid;
-    if(feedback)feedback.textContent=lang==="ar"?"جارٍ تحميل الإعلان…":"Loading ad…";
-    // The browser result is not trusted for points. Only Monetag's server postback awards points.
+    let secondsLeft=10;
+    if(feedback)feedback.textContent=lang==="ar"?"الإعلان قيد العرض… "+secondsLeft+" ثوانٍ":"Ad in progress… "+secondsLeft+"s";
+    const adCountdown=setInterval(()=>{
+      secondsLeft=Math.max(0,secondsLeft-1);
+      if(feedback)feedback.textContent=secondsLeft>0
+        ?(lang==="ar"?"الإعلان قيد العرض… "+secondsLeft+" ثوانٍ":"Ad in progress… "+secondsLeft+"s")
+        :(lang==="ar"?"بانتظار انتهاء الإعلان…":"Waiting for the ad to finish…");
+    },1000);
+    // Each user click requests a fresh Monetag ad opportunity. The 10-second display is informational only.
+    // Never award points from the browser Promise; only the verified Monetag postback can do that.
     try{await window.show_12265048({ymid});}catch(adError){console.warn("Monetag SDK result:",adError);}
-    if(feedback)feedback.textContent=lang==="ar"?"تم استلام الإعلان. نتحقق من المكافأة…":"Ad finished. Verifying your reward…";
+    clearInterval(adCountdown);
+    if(feedback)feedback.textContent=lang==="ar"?"انتهى عرض الإعلان. نتحقق من المكافأة…":"Ad closed. Verifying your reward…";
     for(let attempt=0;attempt<36;attempt++){
       await new Promise(resolve=>setTimeout(resolve,2500));
       const statusResponse=await fetch("/api/monetag/status?ymid="+encodeURIComponent(ymid),{headers:{"X-Telegram-Init-Data":tg.initData}});
