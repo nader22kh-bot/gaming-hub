@@ -185,3 +185,10 @@ body.rtl .streak-best{text-align:left}
 @keyframes crashTwinkle{from{opacity:.4}to{opacity:1}}
 @keyframes crashShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 @media(max-width:420px){.crash-stage{height:265px}.crash-multiplier{font-size:42px}.crash-stats small{font-size:8px}.crash-stats b{font-size:15px}}
+
+
+/* Crash sound control */
+.crash-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.crash-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crash-sound{border:1px solid #53627f;border-radius:10px;background:#202d47;color:#f7f8fc;padding:7px 10px;font-size:10px;font-weight:800}
+.crash-sound:active{transform:scale(.96)}
