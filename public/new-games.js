@@ -46,33 +46,48 @@
   function basra(){
     const suits=["♠","♥","♦","♣"], values=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
     const deck=()=>suits.flatMap(s=>values.map((v,i)=>({s,v,n:i+1,red:s==="♥"||s==="♦"}))).sort(()=>Math.random()-.5);
-    let cards=[],table=[],hand=[],player=0,computer=0,round=1,locked=false;
+    let cards=[],table=[],hand=[],cpuHand=[],player=0,computer=0,round=1,locked=false;
     const draw=()=>cards.pop();
-    const pointsFor=(card, pile)=>{let p=0;if(card.v==="A")p+=1;if(card.v==="10"&&card.s==="♦")p+=2;if(card.v==="2"&&card.s==="♣")p+=1;if(pile.length===0)p+=10;return p;};
-    function deal(){cards=deck();table=Array.from({length:4},draw);hand=Array.from({length:4},draw);player=0;computer=0;round=1;render();}
+    const capture=(card,pile)=>{
+      if(card.v==="A"){const taken=[...pile];pile.length=0;return taken;}
+      const match=pile.findIndex(c=>c.v===card.v);
+      return match>=0?[pile.splice(match,1)[0]]:[];
+    };
+    const scoreCapture=(taken,cleared)=>taken.reduce((sum,c)=>sum+(c.v==="A"?1:(c.v==="10"&&c.s==="♦"?2:(c.v==="2"&&c.s==="♣"?1:0))),0)+(cleared&&taken.length?10:0);
+    function deal(){cards=deck();table=Array.from({length:4},draw);hand=Array.from({length:4},draw);cpuHand=Array.from({length:4},draw);player=0;computer=0;round=1;locked=false;render();}
     function render(message=""){
       modal(`<div class="basra-game"><div class="basra-head"><span>🃏 BASRA TABLE</span><span>${say("ROUND","الجولة")} ${round}</span></div><div class="basra-score"><div><small>${say("YOU","أنت")}</small><b>${player}</b></div><div class="basra-vs">VS</div><div><small>${say("CPU","الخصم")}</small><b>${computer}</b></div></div>
       <div class="basra-table"><small>${say("CARDS ON TABLE","الأوراق على الطاولة")}</small><div class="basra-cards">${table.map(c=>`<span class="basra-card ${c.red?"red":""}">${c.v}${c.s}</span>`).join("")||"—"}</div></div>
-      <p class="muted">${message||say("Choose a card. Match its value to capture the same card on the table. Aces capture all cards.","اختر ورقة. طابق رقمها لالتقاط الورقة نفسها من الطاولة. الآس يلتقط جميع الأوراق.")}</p>
+      <p class="muted">${message||say("Play a matching rank to capture it. An Ace sweeps the table. Emptying the table earns a Basra bonus.","طابق قيمة الورقة لالتقاطها. الآس يلتقط كل أوراق الطاولة. إفراغ الطاولة يمنحك مكافأة الباصرة.")}</p>
       <div class="basra-hand">${hand.map((c,i)=>`<button class="basra-card ${c.red?"red":""}" data-basra="${i}">${c.v}<br>${c.s}</button>`).join("")}</div>
       <div class="basra-actions"><button class="answer" id="basraNew">${say("New game","لعبة جديدة")}</button><span class="muted">${say("Cards left","الأوراق المتبقية")}: ${cards.length}</span></div></div>`);
       document.querySelectorAll("[data-basra]").forEach(b=>b.onclick=()=>play(Number(b.dataset.basra)));
       $("basraNew").onclick=deal;
     }
-    async function play(index){
-      if(locked||!hand[index])return;locked=true;const chosen=hand.splice(index,1)[0];
-      let captured=[];
-      if(chosen.v==="A"){captured=[...table];table=[];}
-      else {const match=table.findIndex(c=>c.v===chosen.v);if(match>=0)captured=[table.splice(match,1)[0]];}
-      if(captured.length){player+=pointsFor(chosen,captured);if(table.length===0&&captured.length>0)player+=10;}
-      else table.push(chosen);
-      if(hand.length===0&&cards.length){hand=Array.from({length:Math.min(4,cards.length)},draw);const cpu=draw();if(cpu){const idx=table.findIndex(c=>c.v===cpu.v);if(cpu.v==="A"){computer+=10+table.length;table=[];}else if(idx>=0){table.splice(idx,1);computer+=1;}else table.push(cpu);}round++;}
-      if(!cards.length&&!hand.length){
-        const won=player>computer;let msg=won?say("You won the table!","فزت بالجولة!"):say("Round complete. Try again!","انتهت الجولة. حاول مرة أخرى!");
-        if(won){try{await score("basra_win");msg+=say(" · +25 points"," · +25 نقطة");}catch(e){msg+=" · "+e.message;}}
-        render(msg);locked=false;return;
+    async function finish(){
+      const won=player>computer;let msg=won?say("You won the table!","فزت بالجولة!"):player===computer?say("It's a tie!","تعادل!"):say("CPU won this round. Try again!","فاز الخصم بهذه الجولة. حاول مجدداً!");
+      if(won){try{await score("basra_win");msg+=say(" · +25 points"," · +25 نقطة");}catch(e){msg+=" · "+e.message;}}
+      render(msg);locked=false;
+    }
+    function cpuTurn(){
+      if(!cpuHand.length)return;
+      const index=Math.floor(Math.random()*cpuHand.length),card=cpuHand.splice(index,1)[0],before=table.length;
+      const taken=capture(card,table);
+      if(taken.length)computer+=scoreCapture(taken,table.length===0);
+      else table.push(card);
+      if(!hand.length&&!cpuHand.length){
+        if(cards.length){hand=Array.from({length:Math.min(4,cards.length)},draw);cpuHand=Array.from({length:Math.min(4,cards.length)},draw);round++;}
+        else {finish();return;}
       }
-      render(captured.length?say("Cards captured!","تم التقاط الأوراق!"):"No match — card added to the table.");locked=false;
+      render(taken.length?say("CPU captured cards. Your turn!","التقط الخصم أوراقاً. دورك الآن!") : say("CPU played a card. Your turn!","لعب الخصم ورقة. دورك الآن!"));locked=false;
+    }
+    function play(index){
+      if(locked||!hand[index])return;locked=true;
+      const card=hand.splice(index,1)[0],taken=capture(card,table);
+      if(taken.length)player+=scoreCapture(taken,table.length===0);
+      else table.push(card);
+      if(!hand.length&&!cpuHand.length&&!cards.length){finish();return;}
+      cpuTurn();
     }
     deal();
   }
