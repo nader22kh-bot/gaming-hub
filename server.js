@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import { Telegraf, Markup } from 'telegraf';
-import { createMatch, applyMatchAction, publicMatchState, chooseAiBid, chooseAiCard } from './baloot-engine.js';
+import { createMatch, applyMatchAction, publicMatchState, chooseAiBid, chooseAiCard, startNextRound } from './baloot-engine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -188,6 +188,20 @@ app.post('/api/baloot/solo/start', requireTelegramUser, (req,res)=>{
     console.error("Solo Baloot start failed",e);
     res.status(500).json({error:"Could not start a Baloot match."});
   }
+});
+
+app.post('/api/baloot/solo/:gameId/next', requireTelegramUser, (req,res)=>{
+  const gameId=String(req.params.gameId||"");
+  const game=soloBalootMatches.get(gameId);
+  const id=String(req.telegramUser.id);
+  if(!game || game.owner!==id) return res.status(404).json({error:"Baloot match not found. Start a new match."});
+  try {
+    const next=startNextRound(game.state);
+    next.currentSeat=1;
+    const advanced=runSoloBalootCpu(next);
+    soloBalootMatches.set(gameId,{owner:id,state:advanced});
+    res.json({match:soloBalootView(advanced,id)});
+  } catch(e) { roomError(res,e); }
 });
 app.post('/api/baloot/solo/:gameId/action', requireTelegramUser, (req,res)=>{
   const gameId=String(req.params.gameId||"");
