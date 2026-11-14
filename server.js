@@ -197,7 +197,7 @@ app.post('/api/baloot/solo/:gameId/next', requireTelegramUser, (req,res)=>{
   if(!game || game.owner!==id) return res.status(404).json({error:"Baloot match not found. Start a new match."});
   try {
     const next=startNextRound(game.state);
-    next.currentSeat=1;
+    next.currentSeat=(next.dealer+1)%4;
     const advanced=runSoloBalootCpu(next);
     soloBalootMatches.set(gameId,{owner:id,state:advanced});
     res.json({match:soloBalootView(advanced,id)});
