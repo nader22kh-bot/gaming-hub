@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 import { Telegraf, Markup } from 'telegraf';
-import { createMatch, applyMatchAction, publicMatchState } from './baloot-engine.js';
+import { createMatch, applyMatchAction, publicMatchState, chooseAiBid, chooseAiCard } from './baloot-engine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -146,6 +146,64 @@ if (bot) {
   ));
 }
 
+
+
+const soloBalootMatches = new Map();
+function soloBalootView(state, viewerId) {
+  return { ...publicMatchState(state, viewerId), solo: true };
+}
+function runSoloBalootCpu(state) {
+  let guard = 0;
+  while (state.phase !== "round_complete" && state.currentSeat !== 0 && guard++ < 20) {
+    const seat = state.currentSeat;
+    const player = state.seats[seat];
+    let action;
+    if (state.phase === "bidding") action = chooseAiBid(player.hand, state, seat);
+    else if (state.phase === "playing") {
+      const card = chooseAiCard(player.hand, state.trick, state.contract, seat);
+      action = { type: "play", card: card.suit + ":" + card.rank };
+    } else break;
+    state = applyMatchAction(state, player.userId, action, crypto.randomUUID()).state;
+  }
+  return state;
+}
+app.post('/api/baloot/solo/start', requireTelegramUser, (req,res)=>{
+  try {
+    const user = req.telegramUser;
+    const id = String(user.id);
+    const players = [
+      { userId:id, name:user.first_name || "You" },
+      { userId:"cpu-"+crypto.randomUUID(), name:"CPU · North" },
+      { userId:"partner-"+crypto.randomUUID(), name:"Your Partner" },
+      { userId:"cpu-"+crypto.randomUUID(), name:"CPU · South" }
+    ];
+    const state = createMatch(players);
+    state.currentSeat = 1;
+    const gameId = crypto.randomUUID();
+    soloBalootMatches.set(gameId, { owner:id, state });
+    const advanced = runSoloBalootCpu(state);
+    soloBalootMatches.set(gameId, { owner:id, state:advanced });
+    res.status(201).json({ gameId, match:soloBalootView(advanced,id) });
+  } catch(e) {
+    console.error("Solo Baloot start failed",e);
+    res.status(500).json({error:"Could not start a Baloot match."});
+  }
+});
+app.post('/api/baloot/solo/:gameId/action', requireTelegramUser, (req,res)=>{
+  const gameId=String(req.params.gameId||"");
+  const game=soloBalootMatches.get(gameId);
+  const id=String(req.telegramUser.id);
+  if(!game || game.owner!==id) return res.status(404).json({error:"Baloot match not found. Start a new match."});
+  try {
+    const result=applyMatchAction(game.state,id,req.body?.action,String(req.body?.actionId||""));
+    let state=result.state;
+    if(!result.duplicate) state=runSoloBalootCpu(state);
+    soloBalootMatches.set(gameId,{owner:id,state});
+    res.json({match:soloBalootView(state,id),event:result.event,duplicate:result.duplicate});
+  } catch(e) {
+    roomError(res,e);
+  }
+});
 
 const balootShopItems = {
   felt_green: 100,
