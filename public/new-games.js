@@ -75,6 +75,49 @@
   }
 
   function basra(){
+    let musicOn=false, musicTimer=null, musicContext=null, musicStep=0, modalObserver=null;
+    const musicNotes=[220,261.63,293.66,329.63,392,440,392,329.63,293.66,261.63];
+    function stopBasraMusic(){
+      musicOn=false;
+      if(musicTimer!==null){clearInterval(musicTimer);musicTimer=null;}
+      if(musicContext && musicContext.state==="running") musicContext.suspend().catch(()=>{});
+      const button=$("basraMusic");
+      if(button)button.textContent=say("♫ Music: OFF","♫ الموسيقى: متوقفة");
+    }
+    function playBasraNote(){
+      if(!musicOn||!musicContext)return;
+      const now=musicContext.currentTime, freq=musicNotes[musicStep++%musicNotes.length];
+      const osc=musicContext.createOscillator(), gain=musicContext.createGain();
+      osc.type="sine";osc.frequency.setValueAtTime(freq,now);
+      gain.gain.setValueAtTime(0.0001,now);
+      gain.gain.linearRampToValueAtTime(0.025,now+0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001,now+1.05);
+      osc.connect(gain);gain.connect(musicContext.destination);
+      osc.start(now);osc.stop(now+1.1);
+    }
+    function toggleBasraMusic(){
+      const AudioCtor=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtor){const b=$("basraMusic");if(b)b.textContent=say("Audio unavailable","الصوت غير متاح");return;}
+      if(musicOn){stopBasraMusic();return;}
+      try{
+        if(!musicContext)musicContext=new AudioCtor();
+        musicContext.resume().then(()=>{
+          musicOn=true;
+          const b=$("basraMusic");if(b)b.textContent=say("♫ Music: ON","♫ الموسيقى: تعمل");
+          playBasraNote();
+          musicTimer=setInterval(playBasraNote,720);
+          if(!modalObserver){
+            const modalNode=$("gameModal");
+            modalObserver=new MutationObserver(()=>{
+              if(modalNode.classList.contains("hidden")){
+                stopBasraMusic();modalObserver.disconnect();modalObserver=null;
+              }
+            });
+            modalObserver.observe(modalNode,{attributes:true,attributeFilter:["class"]});
+          }
+        }).catch(()=>{});
+      }catch(_){}
+    }
     const suits=["♠","♥","♦","♣"], values=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
     const deck=()=>suits.flatMap(s=>values.map((v,i)=>({s,v,n:i+1,red:s==="♥"||s==="♦"}))).sort(()=>Math.random()-.5);
     let cards=[],table=[],hand=[],cpuHand=[],player=0,computer=0,round=1,locked=false;
@@ -87,13 +130,14 @@
     const scoreCapture=(taken,cleared)=>taken.reduce((sum,c)=>sum+(c.v==="A"?1:(c.v==="10"&&c.s==="♦"?2:(c.v==="2"&&c.s==="♣"?1:0))),0)+(cleared&&taken.length?10:0);
     function deal(){cards=deck();table=Array.from({length:4},draw);hand=Array.from({length:4},draw);cpuHand=Array.from({length:4},draw);player=0;computer=0;round=1;locked=false;render();}
     function render(message=""){
-      modal(`<div class="basra-game"><div class="basra-head"><span>🃏 BASRA TABLE</span><span>${say("ROUND","الجولة")} ${round}</span></div><div class="basra-opponent"><span>🤖</span><b>Bot 1</b><small>${say("COMPUTER","الكمبيوتر")}</small></div><div class="basra-score"><div><small>${say("YOU","أنت")}</small><b>${player}</b></div><div class="basra-vs">VS</div><div><small>${say("CPU","الخصم")}</small><b>${computer}</b></div></div>
+      modal(`<div class="basra-game"><div class="basra-head"><span>🃏 BASRA TABLE</span><span>${say("ROUND","الجولة")} ${round}</span><button type="button" id="basraMusic" class="answer" style="padding:7px 10px;font-size:12px">♫ ${say("Music: OFF","الموسيقى: متوقفة")}</button></div><div class="basra-opponent"><span>🤖</span><b>Bot 1</b><small>${say("COMPUTER","الكمبيوتر")}</small></div><div class="basra-score"><div><small>${say("YOU","أنت")}</small><b>${player}</b></div><div class="basra-vs">VS</div><div><small>${say("CPU","الخصم")}</small><b>${computer}</b></div></div>
       <div class="basra-table"><small>${say("CARDS ON TABLE","الأوراق على الطاولة")}</small><div class="basra-cards">${table.map(c=>`<span class="basra-card ${c.red?"red":""}">${c.v}${c.s}</span>`).join("")||"—"}</div></div>
       <p class="muted">${message||say("Play a matching rank to capture it. An Ace sweeps the table. Emptying the table earns a Basra bonus.","طابق قيمة الورقة لالتقاطها. الآس يلتقط كل أوراق الطاولة. إفراغ الطاولة يمنحك مكافأة الباصرة.")}</p>
       <div class="basra-player-label">${say("YOUR HAND","أوراقك")}</div><div class="basra-hand">${hand.map((c,i)=>`<button class="basra-card ${c.red?"red":""}" data-basra="${i}">${c.v}<br>${c.s}</button>`).join("")}</div>
       <div class="basra-actions"><button class="answer" id="basraNew">${say("New game","لعبة جديدة")}</button><span class="muted">${say("Cards left","الأوراق المتبقية")}: ${cards.length}</span></div></div>`);
       document.querySelectorAll("[data-basra]").forEach(b=>b.onclick=()=>play(Number(b.dataset.basra)));
       $("basraNew").onclick=deal;
+      $("basraMusic").onclick=toggleBasraMusic;
     }
     async function finish(){
       const won=player>computer;let msg=won?say("You won the table!","فزت بالجولة!"):player===computer?say("It's a tie!","تعادل!"):say("CPU won this round. Try again!","فاز الخصم بهذه الجولة. حاول مجدداً!");
