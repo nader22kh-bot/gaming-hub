@@ -238,3 +238,50 @@ body.rtl .streak-best{text-align:left}
 .baloot-3d-table .trick-card{display:inline-flex;align-items:center;justify-content:center;min-width:43px;min-height:55px;padding:5px;border-radius:7px;background:#fff9e9;color:#18372a;font-size:12px;font-weight:900;box-shadow:0 4px 10px #0008}
 .baloot-3d-table .baloot-seat.active-turn .baloot-avatar{box-shadow:0 0 0 4px #f6d36b,0 0 20px #ffe59a}
 .baloot-3d-table .baloot-seat .baloot-back-cards{font-size:10px}
+
+
+/* Baloot: rectangular table with a permanently visible player hand below it */
+.modal-card:has(.baloot-casino){
+  max-height:96dvh;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.baloot-casino{width:100%;min-width:0}
+.baloot-3d-table{
+  width:100%;
+  min-height:clamp(300px,58vw,430px);
+  border-radius:26px;
+  overflow:hidden;
+}
+.baloot-3d-table:before{border-radius:18px}
+.baloot-3d-table:after{border-radius:inherit}
+.baloot-casino-hand{
+  display:flex;
+  width:100%;
+  min-height:108px;
+  justify-content:center;
+  align-items:flex-end;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  overflow-y:visible;
+  padding:8px 3px 16px;
+  margin:8px 0 12px;
+  gap:clamp(3px,1vw,8px);
+  scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;
+}
+.baloot-casino-hand .baloot-3d-card{
+  flex:1 1 0;
+  min-width:0;
+  max-width:76px;
+  height:clamp(82px,17vw,108px);
+}
+.baloot-player-caption{margin-top:8px}
+@media(max-width:420px){
+  .modal-card:has(.baloot-casino){padding:9px}
+  .baloot-3d-table{min-height:310px;border-radius:20px;border-width:8px}
+  .baloot-casino-hand{justify-content:flex-start;gap:4px}
+  .baloot-casino-hand .baloot-3d-card{flex:0 0 calc((100% - 28px)/8);min-width:0;height:86px;padding:5px 3px!important}
+}
