@@ -500,6 +500,54 @@ app.post('/api/adsgram/reward', requireTelegramUser, async (req,res) => {
   }finally{client.release();}
 });
 
+
+app.post('/api/crash/start', requireTelegramUser, async (req, res) => {
+  const userId = String(req.telegramUser.id);
+  const roundId = crypto.randomUUID();
+  const crashAt = 1.15 + Math.random() * 5.8;
+  try {
+    await pool.query("INSERT INTO crash_rounds (round_id, telegram_id, crash_at) VALUES ($1,$2,$3)", [roundId, userId, crashAt]);
+    res.json({ roundId, crashAt, startedAt: Date.now() });
+  } catch (error) {
+    console.error('Crash round start failed:', error);
+    res.status(500).json({ error: 'Could not start a Crash round.' });
+  }
+});
+
+app.post('/api/crash/cashout', requireTelegramUser, async (req, res) => {
+  const userId = String(req.telegramUser.id);
+  const roundId = String(req.body?.roundId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(roundId)) return res.status(400).json({ error: 'Invalid round.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [userId]);
+    const round = await client.query("SELECT round_id, crash_at, EXTRACT(EPOCH FROM (NOW()-created_at)) AS elapsed, status FROM crash_rounds WHERE round_id=$1 AND telegram_id=$2 FOR UPDATE", [roundId, userId]);
+    if (!round.rowCount || round.rows[0].status !== 'running') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'This round is no longer active.' }); }
+    const currentFactor = Math.exp(Number(round.rows[0].elapsed) * 0.19);
+    if (currentFactor >= Number(round.rows[0].crash_at)) {
+      await client.query("UPDATE crash_rounds SET status='crashed' WHERE round_id=$1", [roundId]);
+      await client.query('COMMIT');
+      return res.status(409).json({ error: 'Too late! The rocket has crashed.' });
+    }
+    const daily = await client.query("SELECT COUNT(*)::int AS total FROM game_reward_claims WHERE telegram_id=$1 AND game='crash_cashout' AND claimed_on=(NOW() AT TIME ZONE 'Asia/Riyadh')::date", [userId]);
+    if (daily.rows[0].total >= 10) { await client.query('ROLLBACK'); return res.status(429).json({ error: 'Daily Crash reward limit reached.' }); }
+    await client.query("INSERT INTO game_reward_claims (telegram_id, game) VALUES ($1,'crash_cashout')", [userId]);
+    const vip = await client.query("SELECT expires_at FROM vip_subscriptions WHERE telegram_id=$1 AND status='active'", [userId]);
+    const isVip = Boolean(vip.rows[0] && new Date(vip.rows[0].expires_at) > new Date());
+    const awarded = isVip ? 15 : 10;
+    const points = await client.query("INSERT INTO players (telegram_id,username,first_name,points) VALUES ($1,$2,$3,120+$4) ON CONFLICT (telegram_id) DO UPDATE SET points=players.points+$4,username=EXCLUDED.username,first_name=EXCLUDED.first_name,updated_at=NOW() RETURNING points", [userId, req.telegramUser.username || null, req.telegramUser.first_name || null, awarded]);
+    await client.query("UPDATE crash_rounds SET status='cashed_out', cashout_factor=$2, awarded=$3 WHERE round_id=$1", [roundId, currentFactor, awarded]);
+    await recordPlayerActivity(client, userId);
+    await client.query('COMMIT');
+    res.json({ accepted: true, factor: Number(currentFactor.toFixed(2)), awarded, points: points.rows[0].points });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Crash cashout failed:', error);
+    res.status(500).json({ error: 'Could not save your Crash reward.' });
+  } finally { client.release(); }
+});
+
 app.post('/api/score', requireTelegramUser, async (req, res) => {
   const reward = rewards[req.body?.game];
   if (!reward) return res.status(400).json({ error: 'Unknown game reward.' });
@@ -645,6 +693,18 @@ async function start() {
     CREATE INDEX IF NOT EXISTS adsgram_reward_claims_user_day_idx
     ON adsgram_reward_claims (telegram_id, claimed_on)
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crash_rounds (
+      round_id UUID PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      crash_at NUMERIC(10,4) NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      cashout_factor NUMERIC(10,2),
+      awarded INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crash_rounds_user_created_idx ON crash_rounds (telegram_id, created_at DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_reward_claims (
       id BIGSERIAL PRIMARY KEY,
