@@ -164,3 +164,24 @@ body.rtl .streak-best{text-align:left}
 .basra-actions .answer{background:linear-gradient(110deg,#344a78,#222f54);border:1px solid #6476a8;text-align:center;box-shadow:0 6px 14px #0004}
 .basra-actions .muted{text-align:center}
 @media(max-width:480px){.modal-card:has(.basra-game){padding:12px 10px}.basra-table{min-height:245px;border-radius:48% / 35%;margin:15px 0 18px}.basra-opponent span{width:48px;height:48px;font-size:26px}.basra-score{gap:6px}.basra-score>div{padding:8px 4px}.basra-cards{gap:7px}.basra-hand{gap:7px}}
+
+/* Crash Arena visual upgrade */
+.modal-card:has(.crash-game){width:min(620px,calc(100vw - 20px));max-height:91vh;padding:clamp(14px,3vw,24px);background:radial-gradient(ellipse at 50% 0%,#34205d,#111a32 68%);border:1px solid #7457a9;box-shadow:0 25px 85px #000c,inset 0 1px #ffffff1c}
+.crash-game{color:#f7f4ff}.crash-top{font-size:12px;color:#d9c8ff}.crash-live{color:#76f5bd;text-shadow:0 0 12px #55ffad66}
+.crash-stage{height:300px;position:relative;overflow:hidden;border-radius:22px;margin:16px 0;background:radial-gradient(ellipse at 50% 105%,#35599b 0%,#1a2852 42%,#0b1129 78%);border:1px solid #6656a5;box-shadow:inset 0 0 55px #7164d733,0 12px 30px #0007}
+.crash-stage:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(120deg,transparent 0 44px,#ffffff06 45px 46px);transform:perspective(180px) rotateX(28deg) scale(1.5);transform-origin:bottom}
+.crash-stars{position:absolute;inset:12px 0 auto;text-align:center;color:#c5d7ff;letter-spacing:9px;opacity:.8;animation:crashTwinkle 2s ease-in-out infinite alternate}
+.crash-orbit{position:absolute;width:270px;height:160px;bottom:-100px;left:50%;transform:translateX(-50%);border:1px solid #a68aff66;border-radius:50%;box-shadow:0 0 35px #805cff55}
+.crash-rocket{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);font-size:60px;z-index:2;filter:drop-shadow(0 8px 13px #0009);transition:transform .12s linear}
+.crash-trail{position:absolute;left:calc(50% - 3px);top:57%;height:0;width:6px;border-radius:50%;background:linear-gradient(#ffe6a1,#ff7b43,transparent);filter:blur(4px);transition:height .1s linear}
+.crash-multiplier{position:absolute;left:0;right:0;bottom:49px;text-align:center;font-size:48px;font-weight:1000;letter-spacing:-2px;color:#fff;text-shadow:0 0 10px #a68aff,0 0 30px #7654ff}
+.crash-status{position:absolute;bottom:24px;left:10px;right:10px;text-align:center;color:#d3dafa;font-size:11px}
+.crash-progress{position:absolute;bottom:0;left:0;right:0;height:5px;background:#ffffff19}.crash-progress span{display:block;width:0;height:100%;background:linear-gradient(90deg,#62e5bf,#c1a1ff,#ff8b8b);transition:width .1s linear}
+.crash-stage.crashed{background:radial-gradient(ellipse at center,#762b55,#24142e 75%);animation:crashShake .35s ease}.crash-stage.cashed{box-shadow:inset 0 0 70px #2ee6a744,0 0 24px #2ee6a733}
+.crash-controls{gap:10px}.crash-controls .game-action{border-radius:13px;min-height:48px;font-weight:900;letter-spacing:.3px}.crash-controls .game-action:disabled{opacity:.42;filter:grayscale(.4)}
+.crash-cashout{background:linear-gradient(110deg,#087d5b,#24c88b)!important;box-shadow:0 7px 22px #12c88b33}
+.crash-stats{gap:7px}.crash-stats div{background:linear-gradient(145deg,#26345a,#171f3c);border-color:#ffffff20}.crash-stats b{color:#fff;font-size:17px}
+.crash-history{margin:12px 0;padding:11px 12px;border-radius:13px;background:#ffffff09;border:1px solid #ffffff16}.crash-history>small{display:block;color:#b9c5df;font-size:9px;font-weight:900;letter-spacing:1.2px;margin-bottom:8px}.crash-history>div{display:flex;gap:7px;flex-wrap:wrap;color:#9baac6;font-size:11px}.crash-history span{padding:5px 9px;border-radius:8px;background:#ffffff12;font-weight:900}.crash-history span.won{color:#77f2bd;background:#1a795344}.crash-history span.lost{color:#ff9da9;background:#8b344444}.crash-note{font-size:10px;line-height:1.6}
+@keyframes crashTwinkle{from{opacity:.4}to{opacity:1}}
+@keyframes crashShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@media(max-width:420px){.crash-stage{height:265px}.crash-multiplier{font-size:42px}.crash-stats small{font-size:8px}.crash-stats b{font-size:15px}}
