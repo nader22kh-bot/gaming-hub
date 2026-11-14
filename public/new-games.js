@@ -12,34 +12,65 @@
   };
 
   function crash(){
-    let timer=null, running=false, crashed=false, factor=1, start=0, banked=false;
+    let timer=null,running=false,factor=1,roundId=null,crashAt=0,startedAt=0,best=1,history=[];
+    const auth=()=>({"Content-Type":"application/json","X-Telegram-Init-Data":window.Telegram?.WebApp?.initData||""});
+    const post=async(url,body={})=>{const r=await fetch(url,{method:"POST",headers:auth(),body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||"Request failed");return d;};
     const render=()=>modal(`<div class="crash-game">
-      <div class="crash-top"><span>🚀 CRASH ARENA</span><span class="crash-live">● LIVE SIMULATION</span></div>
-      <p class="muted">${say("Cash out before the rocket crashes. Play with hub points only.","اسحب قبل تحطم الصاروخ. اللعب بنقاط Gaming Hub فقط.")}</p>
-      <div class="crash-stage" id="crashStage"><div class="crash-stars">✦　 ·　 ✧　 ·　 ✦</div><div class="crash-rocket" id="crashRocket">🚀</div><div class="crash-multiplier" id="crashMultiplier">1.00x</div><div class="crash-status" id="crashStatus">${say("Ready for takeoff?","هل أنت مستعد للإقلاع؟")}</div></div>
+      <div class="crash-top"><span>🚀 CRASH ARENA</span><span class="crash-live">● SERVER ROUND</span></div>
+      <p class="muted">${say("Watch the multiplier rise. Cash out before the crash!","راقب ارتفاع المعامل واسحب قبل الانفجار!")}</p>
+      <div class="crash-stage" id="crashStage">
+        <div class="crash-stars">✦　 ·　 ✧　 ·　 ✦　 ·　 ✧</div>
+        <div class="crash-orbit"></div><div class="crash-trail" id="crashTrail"></div>
+        <div class="crash-rocket" id="crashRocket">🚀</div>
+        <div class="crash-multiplier" id="crashMultiplier">1.00x</div>
+        <div class="crash-status" id="crashStatus">${say("Ready for takeoff?","جاهز للإقلاع؟")}</div>
+        <div class="crash-progress"><span id="crashProgress"></span></div>
+      </div>
       <div class="crash-controls"><button class="game-action" id="crashStart">${say("🚀 START ROUND","🚀 ابدأ الجولة")}</button><button class="game-action crash-cashout" id="crashCashout" disabled>${say("💰 CASH OUT","💰 اسحب النقاط")}</button></div>
-      <div class="crash-stats"><div><small>${say("LAST MULTIPLIER","آخر معامل")}</small><b id="crashLast">—</b></div><div><small>${say("BEST THIS SESSION","أفضل نتيجة")}</small><b id="crashBest">—</b></div><div><small>${say("REWARD","المكافأة")}</small><b id="crashReward">0 ⭐</b></div></div>
-      <p class="muted">${say("Demo mode: no money, deposits or withdrawals. Rewards are game points and are credited only after a successful cash-out.","نسخة تجريبية: لا توجد أموال أو إيداعات أو سحوبات مالية. المكافآت نقاط لعب تُضاف عند السحب الناجح.")}</p>
+      <div class="crash-stats"><div><small>${say("LAST ROUND","الجولة السابقة")}</small><b id="crashLast">—</b></div><div><small>${say("PERSONAL BEST","أفضل معامل")}</small><b id="crashBest">1.00x</b></div><div><small>${say("REWARD","المكافأة")}</small><b id="crashReward">0 ⭐</b></div></div>
+      <div class="crash-history"><small>${say("RECENT ROUNDS","آخر الجولات")}</small><div id="crashHistory">${say("No rounds yet","لا توجد جولات بعد")}</div></div>
+      <p class="muted crash-note">${say("Demo game using virtual hub points only. No cash, deposits or withdrawals. Reward: 10 points per successful cash-out (15 for VIP), up to 10 daily.","لعبة تجريبية بنقاط افتراضية فقط، دون أموال أو إيداعات أو سحوبات. المكافأة 10 نقاط عند السحب الناجح (15 للـVIP)، بحد أقصى 10 مرات يومياً.")}</p>
     </div>`);
-    const startBtn=$("crashStart"), cashBtn=$("crashCashout"), multiplier=$("crashMultiplier"), rocket=$("crashRocket"), status=$("crashStatus"), stage=$("crashStage");
+    const $id=id=>document.getElementById(id);
+    const startBtn=$id("crashStart"),cashBtn=$id("crashCashout"),stage=$id("crashStage"),rocket=$id("crashRocket"),multiplier=$id("crashMultiplier"),status=$id("crashStatus");
     const stop=()=>{if(timer)clearInterval(timer);timer=null;running=false;cashBtn.disabled=true;startBtn.disabled=false;};
-    const boom=()=>{if(!running)return;crashed=true;stop();stage.classList.add("crashed");rocket.textContent="💥";status.textContent=say("CRASHED! Better luck next round.","انفجر الصاروخ! حظاً أوفر في الجولة القادمة.");$("crashLast").textContent=factor.toFixed(2)+"x";};
-    startBtn.onclick=()=>{
-      if(running)return; if(timer)clearInterval(timer);
-      running=true;crashed=false;banked=false;factor=1;start=performance.now();stage.classList.remove("crashed");
-      rocket.textContent="🚀";multiplier.textContent="1.00x";status.textContent=say("Flying… cash out anytime!","الصاروخ يرتفع… اسحب في أي وقت!");
-      startBtn.disabled=true;cashBtn.disabled=false;
-      const crashAt=1.15+Math.random()*5.8;
-      timer=setInterval(()=>{const elapsed=(performance.now()-start)/1000;factor=Math.exp(elapsed*0.19);multiplier.textContent=factor.toFixed(2)+"x";rocket.style.transform=`translateY(-${Math.min(115,elapsed*13)}px) rotate(-12deg)`;if(factor>=crashAt)boom();},60);
+    const showHistory=(value,label)=>{history.unshift({value,label});history=history.slice(0,5);$id("crashHistory").innerHTML=history.map(x=>`<span class="${x.label==="WIN"?"won":"lost"}">${x.value}x</span>`).join("");};
+    const boom=()=>{if(!running)return;stop();stage.classList.add("crashed");rocket.textContent="💥";$id("crashTrail").style.opacity="0";status.textContent=say("CRASHED! Try another round.","انفجر الصاروخ! حاول في جولة أخرى.");$id("crashLast").textContent=factor.toFixed(2)+"x";showHistory(factor.toFixed(2),"LOSS");};
+    startBtn.onclick=async()=>{
+      if(running)return;
+      startBtn.disabled=true;status.textContent=say("Preparing a verified round…","جارٍ تجهيز جولة موثوقة…");
+      try{
+        const d=await post("/api/crash/start");
+        roundId=d.roundId;crashAt=Number(d.crashAt);startedAt=Date.now();factor=1;running=true;
+        stage.classList.remove("crashed");rocket.textContent="🚀";rocket.style.transform="translate(0,0)";$id("crashTrail").style.opacity="1";$id("crashProgress").style.width="0%";
+        multiplier.textContent="1.00x";status.textContent=say("Flying… cash out anytime!","الصاروخ يرتفع… اسحب في أي وقت!");
+        cashBtn.disabled=false;
+        timer=setInterval(()=>{
+          const elapsed=(Date.now()-startedAt)/1000;factor=Math.exp(elapsed*.19);
+          multiplier.textContent=factor.toFixed(2)+"x";
+          const rise=Math.min(125,elapsed*18);
+          rocket.style.transform=`translateY(-${rise}px) rotate(-13deg)`;
+          $id("crashTrail").style.height=Math.min(115,elapsed*18)+"px";
+          $id("crashProgress").style.width=Math.min(100,(factor/crashAt)*100)+"%";
+          if(factor>=crashAt)boom();
+        },50);
+      }catch(e){status.textContent=e.message;startBtn.disabled=false;}
     };
     cashBtn.onclick=async()=>{
-      if(!running||banked)return;banked=true;const captured=factor;stop();
-      const reward=10;
-      cashBtn.disabled=true;status.textContent=say("Cashed out safely! Saving your points…","تم السحب بنجاح! جارٍ حفظ نقاطك…");
-      try{await score("crash_cashout");$("crashReward").textContent="+"+reward+" ⭐";status.textContent=say("Cash-out recorded! A fixed game reward was added.","تم تسجيل السحب وإضافة مكافأة اللعب.");}
-      catch(e){status.textContent=e.message;}
-      $("crashLast").textContent=captured.toFixed(2)+"x";
-      const best=Math.max(Number(($("crashBest").textContent||"0").replace("x",""))||0,captured);$("crashBest").textContent=best.toFixed(2)+"x";
+      if(!running||!roundId)return;
+      const id=roundId;cashBtn.disabled=true;status.textContent=say("Verifying cash-out…","جارٍ التحقق من السحب…");
+      try{
+        const d=await post("/api/crash/cashout",{roundId:id});
+        stop();factor=d.factor;multiplier.textContent=factor.toFixed(2)+"x";
+        $id("crashReward").textContent="+"+d.awarded+" ⭐";$id("crashLast").textContent=factor.toFixed(2)+"x";
+        best=Math.max(best,factor);$id("crashBest").textContent=best.toFixed(2)+"x";
+        status.textContent=say("CASHED OUT! +"+d.awarded+" points saved.","تم السحب! أضيفت "+d.awarded+" نقطة إلى رصيدك.");
+        stage.classList.add("cashed");showHistory(factor.toFixed(2),"WIN");
+        if(typeof window.refreshGamingHub==="function")await window.refreshGamingHub(d.points);
+      }catch(e){
+        stop();stage.classList.add("crashed");rocket.textContent="💥";status.textContent=e.message;
+        $id("crashLast").textContent=factor.toFixed(2)+"x";showHistory(factor.toFixed(2),"LOSS");
+      }
     };
   }
 
