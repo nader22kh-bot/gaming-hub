@@ -365,9 +365,13 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.get('/api/me', requireTelegramUser, async (req, res) => {
+  const user = req.telegramUser;
+  const userId = String(user.id);
+  const client = await pool.connect();
   try {
-    const user = req.telegramUser;
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const today = saudiDateKey();
+    const playerResult = await client.query(
       `INSERT INTO players (telegram_id, username, first_name, points)
        VALUES ($1, $2, $3, 120)
        ON CONFLICT (telegram_id) DO UPDATE
@@ -375,41 +379,76 @@ app.get('/api/me', requireTelegramUser, async (req, res) => {
            first_name = EXCLUDED.first_name,
            updated_at = NOW()
        RETURNING points`,
-      [String(user.id), user.username || null, user.first_name || null]
+      [userId, user.username || null, user.first_name || null]
     );
-    const today = saudiDateKey();
-    const streakResult = await pool.query(
+
+    // Opening the Mini App is the daily activity. The unique daily row makes
+    // repeated opens on the same Saudi calendar day count only once.
+    await recordPlayerActivity(client, userId, today);
+    const streakResult = await client.query(
       `SELECT current_streak, longest_streak, total_active_days, last_active_date::text AS last_active_date
        FROM player_streaks WHERE telegram_id = $1`,
-      [String(user.id)]
+      [userId]
     );
-    const weekResult = await pool.query(
+    const streak = streakResult.rows[0];
+    const streakDay = Number(streak?.current_streak || 1);
+    const bonusByDay = { 3: 20, 7: 50, 14: 100, 30: 500 };
+    const milestoneBonus = bonusByDay[streakDay] || 0;
+    const dailyPoints = 10 + milestoneBonus;
+    const giftCode = streakDay === 30 ? '30_day_legend_badge' : null;
+    const claim = await client.query(
+      `INSERT INTO daily_login_rewards
+         (telegram_id, activity_date, streak_day, points_awarded, gift_code)
+       VALUES ($1, $2::date, $3, $4, $5)
+       ON CONFLICT (telegram_id, activity_date) DO NOTHING
+       RETURNING points_awarded, streak_day, gift_code`,
+      [userId, today, streakDay, dailyPoints, giftCode]
+    );
+
+    let finalPoints = Number(playerResult.rows[0].points);
+    let dailyReward = { awarded: 0, streakDay, milestoneBonus: 0, giftCode: null };
+    if (claim.rowCount) {
+      const updated = await client.query(
+        'UPDATE players SET points = points + $2, updated_at = NOW() WHERE telegram_id = $1 RETURNING points',
+        [userId, dailyPoints]
+      );
+      finalPoints = Number(updated.rows[0].points);
+      dailyReward = {
+        awarded: dailyPoints,
+        streakDay,
+        milestoneBonus,
+        giftCode
+      };
+    }
+
+    const weekResult = await client.query(
       `SELECT COALESCE(json_agg(activity_date::text ORDER BY activity_date), '[]'::json) AS days
        FROM player_daily_activity
        WHERE telegram_id = $1 AND activity_date BETWEEN ($2::date - 6) AND $2::date`,
-      [String(user.id), today]
+      [userId, today]
     );
-    const streak = streakResult.rows[0];
-    const yesterday = new Date(Date.parse(today + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
-    const isCurrent = streak && (streak.last_active_date === today || streak.last_active_date === yesterday);
+    await client.query('COMMIT');
     res.json({
-      points: result.rows[0].points,
+      points: finalPoints,
       firstName: user.first_name || 'Player',
+      dailyReward,
       streak: {
-        current: isCurrent ? Number(streak.current_streak) : 0,
+        current: streakDay,
         longest: Number(streak?.longest_streak || 0),
         totalDays: Number(streak?.total_active_days || 0),
-        lastActiveDate: streak?.last_active_date || null,
+        lastActiveDate: today,
         today,
         weekDays: weekResult.rows[0]?.days || []
       }
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Could not load player:', error);
     res.status(500).json({ error: 'Could not load your saved points.' });
+  } finally {
+    client.release();
   }
 });
-
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const user = verifyTelegramInitData(req.get('X-Telegram-Init-Data'));
@@ -516,6 +555,17 @@ async function start() {
       total_active_days INTEGER NOT NULL DEFAULT 0,
       last_active_date DATE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_login_rewards (
+      telegram_id BIGINT NOT NULL,
+      activity_date DATE NOT NULL,
+      streak_day INTEGER NOT NULL,
+      points_awarded INTEGER NOT NULL DEFAULT 0,
+      gift_code TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (telegram_id, activity_date)
     )
   `);
   await pool.query(`
