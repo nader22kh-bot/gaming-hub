@@ -507,6 +507,12 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (req.body?.game === 'crash_cashout' || req.body?.game === 'basra_win') {
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [userId]);
+      const count = await client.query("SELECT COUNT(*)::int AS total FROM game_reward_claims WHERE telegram_id=$1 AND game=$2 AND claimed_on=(NOW() AT TIME ZONE 'Asia/Riyadh')::date", [userId, req.body.game]);
+      if (count.rows[0].total >= 10) { await client.query('ROLLBACK'); return res.status(429).json({ error: 'Daily reward limit reached for this game. Try again tomorrow.' }); }
+      await client.query('INSERT INTO game_reward_claims (telegram_id, game) VALUES ($1, $2)', [userId, req.body.game]);
+    }
     const vipResult = await client.query(
       "SELECT expires_at FROM vip_subscriptions WHERE telegram_id = $1 AND status = 'active'",
       [userId]
@@ -636,6 +642,19 @@ async function start() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS adsgram_reward_claims_user_day_idx
     ON adsgram_reward_claims (telegram_id, claimed_on)
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS game_reward_claims (
+      id BIGSERIAL PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      game TEXT NOT NULL,
+      claimed_on DATE NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Riyadh')::date,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS game_reward_claims_user_game_day_idx
+    ON game_reward_claims (telegram_id, game, claimed_on)
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
