@@ -56,10 +56,10 @@
     const scoreCapture=(taken,cleared)=>taken.reduce((sum,c)=>sum+(c.v==="A"?1:(c.v==="10"&&c.s==="♦"?2:(c.v==="2"&&c.s==="♣"?1:0))),0)+(cleared&&taken.length?10:0);
     function deal(){cards=deck();table=Array.from({length:4},draw);hand=Array.from({length:4},draw);cpuHand=Array.from({length:4},draw);player=0;computer=0;round=1;locked=false;render();}
     function render(message=""){
-      modal(`<div class="basra-game"><div class="basra-head"><span>🃏 BASRA TABLE</span><span>${say("ROUND","الجولة")} ${round}</span></div><div class="basra-score"><div><small>${say("YOU","أنت")}</small><b>${player}</b></div><div class="basra-vs">VS</div><div><small>${say("CPU","الخصم")}</small><b>${computer}</b></div></div>
+      modal(`<div class="basra-game"><div class="basra-head"><span>🃏 BASRA TABLE</span><span>${say("ROUND","الجولة")} ${round}</span></div><div class="basra-opponent"><span>🤖</span><b>Bot 1</b><small>${say("COMPUTER","الكمبيوتر")}</small></div><div class="basra-score"><div><small>${say("YOU","أنت")}</small><b>${player}</b></div><div class="basra-vs">VS</div><div><small>${say("CPU","الخصم")}</small><b>${computer}</b></div></div>
       <div class="basra-table"><small>${say("CARDS ON TABLE","الأوراق على الطاولة")}</small><div class="basra-cards">${table.map(c=>`<span class="basra-card ${c.red?"red":""}">${c.v}${c.s}</span>`).join("")||"—"}</div></div>
       <p class="muted">${message||say("Play a matching rank to capture it. An Ace sweeps the table. Emptying the table earns a Basra bonus.","طابق قيمة الورقة لالتقاطها. الآس يلتقط كل أوراق الطاولة. إفراغ الطاولة يمنحك مكافأة الباصرة.")}</p>
-      <div class="basra-hand">${hand.map((c,i)=>`<button class="basra-card ${c.red?"red":""}" data-basra="${i}">${c.v}<br>${c.s}</button>`).join("")}</div>
+      <div class="basra-player-label">${say("YOUR HAND","أوراقك")}</div><div class="basra-hand">${hand.map((c,i)=>`<button class="basra-card ${c.red?"red":""}" data-basra="${i}">${c.v}<br>${c.s}</button>`).join("")}</div>
       <div class="basra-actions"><button class="answer" id="basraNew">${say("New game","لعبة جديدة")}</button><span class="muted">${say("Cards left","الأوراق المتبقية")}: ${cards.length}</span></div></div>`);
       document.querySelectorAll("[data-basra]").forEach(b=>b.onclick=()=>play(Number(b.dataset.basra)));
       $("basraNew").onclick=deal;
