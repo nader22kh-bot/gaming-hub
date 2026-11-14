@@ -72,6 +72,52 @@ function requireTelegramUser(req, res, next) {
   next();
 }
 
+
+// Daily play streaks use the Saudi Arabia calendar day and are recorded only
+// after a game reward is successfully saved on the server.
+function saudiDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+async function recordPlayerActivity(client, telegramId, dateKey = saudiDateKey()) {
+  await client.query(
+    'INSERT INTO player_daily_activity (telegram_id, activity_date) VALUES ($1, $2::date) ON CONFLICT DO NOTHING',
+    [telegramId, dateKey]
+  );
+  await client.query(
+    `INSERT INTO player_streaks
+       (telegram_id, current_streak, longest_streak, total_active_days, last_active_date)
+     VALUES ($1, 1, 1, 1, $2::date)
+     ON CONFLICT (telegram_id) DO UPDATE SET
+       current_streak = CASE
+         WHEN player_streaks.last_active_date >= EXCLUDED.last_active_date
+           THEN player_streaks.current_streak
+         WHEN player_streaks.last_active_date = EXCLUDED.last_active_date - 1
+           THEN player_streaks.current_streak + 1
+         ELSE 1
+       END,
+       longest_streak = GREATEST(
+         player_streaks.longest_streak,
+         CASE
+           WHEN player_streaks.last_active_date >= EXCLUDED.last_active_date
+             THEN player_streaks.current_streak
+           WHEN player_streaks.last_active_date = EXCLUDED.last_active_date - 1
+             THEN player_streaks.current_streak + 1
+           ELSE 1
+         END
+       ),
+       total_active_days = player_streaks.total_active_days +
+         CASE WHEN player_streaks.last_active_date < EXCLUDED.last_active_date THEN 1 ELSE 0 END,
+       last_active_date = GREATEST(player_streaks.last_active_date, EXCLUDED.last_active_date),
+       updated_at = NOW()`,
+    [telegramId, dateKey]
+  );
+}
+
 const rewards = {
   quiz_correct: 10,
   memory_complete: 30,
@@ -139,6 +185,7 @@ app.post('/api/baloot/complete', requireTelegramUser, async (req,res)=>{
     ON CONFLICT (telegram_id) DO UPDATE SET stage=EXCLUDED.stage,updated_at=NOW()`,
    [String(req.telegramUser.id),next]
   );
+  await recordPlayerActivity(client, String(req.telegramUser.id));
   await client.query('COMMIT');
   res.json({points:player.rows[0].points,stage:next,reward:25});
  }catch(e){await client.query('ROLLBACK');console.error('Baloot stage claim failed',e);res.status(500).json({error:'Could not save stage reward.'});}
@@ -330,7 +377,33 @@ app.get('/api/me', requireTelegramUser, async (req, res) => {
        RETURNING points`,
       [String(user.id), user.username || null, user.first_name || null]
     );
-    res.json({ points: result.rows[0].points, firstName: user.first_name || 'Player' });
+    const today = saudiDateKey();
+    const streakResult = await pool.query(
+      `SELECT current_streak, longest_streak, total_active_days, last_active_date::text AS last_active_date
+       FROM player_streaks WHERE telegram_id = $1`,
+      [String(user.id)]
+    );
+    const weekResult = await pool.query(
+      `SELECT COALESCE(json_agg(activity_date::text ORDER BY activity_date), '[]'::json) AS days
+       FROM player_daily_activity
+       WHERE telegram_id = $1 AND activity_date BETWEEN ($2::date - 6) AND $2::date`,
+      [String(user.id), today]
+    );
+    const streak = streakResult.rows[0];
+    const yesterday = new Date(Date.parse(today + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+    const isCurrent = streak && (streak.last_active_date === today || streak.last_active_date === yesterday);
+    res.json({
+      points: result.rows[0].points,
+      firstName: user.first_name || 'Player',
+      streak: {
+        current: isCurrent ? Number(streak.current_streak) : 0,
+        longest: Number(streak?.longest_streak || 0),
+        totalDays: Number(streak?.total_active_days || 0),
+        lastActiveDate: streak?.last_active_date || null,
+        today,
+        weekDays: weekResult.rows[0]?.days || []
+      }
+    });
   } catch (error) {
     console.error('Could not load player:', error);
     res.status(500).json({ error: 'Could not load your saved points.' });
@@ -390,15 +463,18 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
   const reward = rewards[req.body?.game];
   if (!reward) return res.status(400).json({ error: 'Unknown game reward.' });
 
+  const user = req.telegramUser;
+  const userId = String(user.id);
+  const client = await pool.connect();
   try {
-    const user = req.telegramUser;
-    const vipResult = await pool.query(
+    await client.query('BEGIN');
+    const vipResult = await client.query(
       "SELECT expires_at FROM vip_subscriptions WHERE telegram_id = $1 AND status = 'active'",
-      [String(user.id)]
+      [userId]
     );
     const isVip = Boolean(vipResult.rows[0] && new Date(vipResult.rows[0].expires_at) > new Date());
     const awarded = isVip ? Math.round(reward * 1.5) : reward;
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO players (telegram_id, username, first_name, points)
        VALUES ($1, $3, $4, 120 + $2)
        ON CONFLICT (telegram_id) DO UPDATE
@@ -407,18 +483,41 @@ app.post('/api/score', requireTelegramUser, async (req, res) => {
            first_name = EXCLUDED.first_name,
            updated_at = NOW()
        RETURNING points`,
-      [String(user.id), awarded, user.username || null, user.first_name || null]
+      [userId, awarded, user.username || null, user.first_name || null]
     );
+    await recordPlayerActivity(client, userId);
+    await client.query('COMMIT');
     res.json({ accepted: true, awarded, vipBonus: isVip, points: result.rows[0].points });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Could not save score:', error);
     res.status(500).json({ error: 'Could not save your points. Please try again.' });
+  } finally {
+    client.release();
   }
 });
 
 const port = Number(process.env.PORT || 3000);
 
 async function start() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS player_daily_activity (
+      telegram_id BIGINT NOT NULL,
+      activity_date DATE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (telegram_id, activity_date)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS player_streaks (
+      telegram_id BIGINT PRIMARY KEY,
+      current_streak INTEGER NOT NULL DEFAULT 0,
+      longest_streak INTEGER NOT NULL DEFAULT 0,
+      total_active_days INTEGER NOT NULL DEFAULT 0,
+      last_active_date DATE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vip_pending_invoices (
       payload TEXT PRIMARY KEY,
