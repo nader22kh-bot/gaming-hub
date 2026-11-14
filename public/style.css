@@ -192,3 +192,37 @@ body.rtl .streak-best{text-align:left}
 .crash-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .crash-sound{border:1px solid #53627f;border-radius:10px;background:#202d47;color:#f7f8fc;padding:7px 10px;font-size:10px;font-weight:800}
 .crash-sound:active{transform:scale(.96)}
+
+/* Baloot Royale: dimensional casino felt table, cards and ambience */
+.modal-card:has(.baloot-casino){width:min(820px,calc(100vw - 14px));max-height:94vh;overflow:auto;padding:clamp(10px,2.5vw,22px);background:radial-gradient(ellipse at 50% 0%,#254e48,#101b28 72%);border:1px solid #b58b4e;box-shadow:0 28px 90px #000d,inset 0 1px #fff2}
+.baloot-casino{color:#fff7e8;position:relative}
+.baloot-casino-head,.baloot-casino-score,.baloot-player-caption,.baloot-casino-footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.baloot-casino-head>div{display:flex;flex-direction:column;gap:4px;font-weight:950;letter-spacing:1.4px;color:#f4d69a}
+.baloot-casino-head small,.baloot-player-caption small{font-size:9px;color:#b7cbbd;letter-spacing:1px}
+.baloot-sound{border:1px solid #b8955c;background:linear-gradient(135deg,#283e36,#15261f);color:#ffe6b2;border-radius:20px;padding:8px 12px;font-size:10px;font-weight:800}
+.baloot-casino-score{margin:12px auto;max-width:470px;padding:9px 14px;border-radius:12px;background:linear-gradient(90deg,#1b332b,#344a35,#1b332b);border:1px solid #9b7948;color:#f8dfad;font-size:11px}
+.baloot-3d-table{position:relative;min-height:clamp(330px,62vw,470px);margin:14px 0 12px;padding:22px 10px 20px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;overflow:hidden;border:12px solid #6e4828;border-radius:48% / 42%;background:radial-gradient(ellipse at 50% 42%,#26845c 0%,#126443 48%,#073e2f 82%);box-shadow:0 0 0 4px #c79a57,0 0 0 8px #382319,0 17px 0 9px #241a15,0 30px 38px #000d,inset 0 5px 16px #ffffff36,inset 0 -28px 45px #001d15}
+.baloot-3d-table:before{content:"";position:absolute;inset:10px;border:2px solid #d6b46a66;border-radius:48% / 42%;box-shadow:inset 0 0 25px #fff1;pointer-events:none}
+.baloot-3d-table:after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(155deg,#ffffff1b 0%,transparent 32%,#00180e30 100%);pointer-events:none}
+.baloot-seat{z-index:1;display:flex;flex-direction:column;align-items:center;gap:3px;text-shadow:0 2px 5px #000}
+.baloot-avatar{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:29px;background:radial-gradient(circle at 35% 25%,#fff0cf,#ad814c 68%,#49321e);border:3px solid #f0d49c;box-shadow:0 5px 14px #0009,0 0 0 4px #d6b36b55}
+.baloot-seat b{font-size:10px;color:#fff1cf}.baloot-seat small{font-size:8px;color:#d3dfcf;letter-spacing:1.4px}
+.baloot-back-cards{display:flex;margin-top:1px}.baloot-back-cards i{font-style:normal;width:20px;height:27px;margin-left:-6px;border:1px solid #e8d7ad;border-radius:4px;background:repeating-linear-gradient(45deg,#1d3c65,#1d3c65 3px,#e4c68c 4px,#1d3c65 5px);display:grid;place-items:center;font-size:11px;color:white;box-shadow:0 2px 5px #0008}
+.baloot-felt-logo{z-index:1;position:absolute;top:39%;left:50%;transform:translate(-50%,-50%);text-align:center;font-weight:1000;font-size:clamp(18px,4vw,29px);letter-spacing:5px;color:#d5bd81;text-shadow:0 2px 3px #003d2a,0 0 15px #b2d2a433;white-space:nowrap}
+.baloot-felt-logo span{display:block;font-size:17px;letter-spacing:12px;margin:5px 0;color:#f2e8c7}.baloot-felt-logo small{display:block;font-size:8px;letter-spacing:2px;color:#d2e2ce}
+.baloot-played-pair{z-index:2;display:flex;align-items:center;justify-content:center;gap:clamp(16px,7vw,55px);margin:auto 0}
+.baloot-played-slot{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:62px}
+.baloot-played-slot>span{width:54px;height:76px;display:grid;place-items:center;border:1px dashed #e7d6a4;border-radius:8px;background:#ffffff12;color:#f9e5b4;font-size:26px}
+.baloot-played-slot .playing-card{pointer-events:none}
+.baloot-played-slot>small{font-size:9px;color:#f2e4c2;font-weight:800}
+.baloot-vs{font-weight:1000;color:#f7df9c;text-shadow:0 2px 8px #000;font-size:13px}
+.baloot-turn-message{min-height:34px;text-align:center;color:#f2dfb6;font-size:12px;font-weight:700}
+.baloot-player-caption{padding:0 4px;color:#e8ce94;font-size:10px;font-weight:900;letter-spacing:1px}
+.baloot-casino-hand{margin:10px 0 14px;gap:clamp(4px,1.4vw,12px);perspective:900px;flex-wrap:nowrap;overflow:visible}
+.baloot-3d-card{position:relative;flex:1 1 0;max-width:76px;min-width:0;height:clamp(86px,17vw,112px);padding:7px 5px!important;border-radius:9px!important;background:linear-gradient(145deg,#fffef7,#e8e2cf)!important;border:2px solid #d6c9a7!important;box-shadow:0 10px 13px #0009,0 2px 2px #fff inset!important;transform:perspective(650px) rotateX(5deg) rotateZ(-1deg);transition:transform .2s,box-shadow .2s;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start}
+.baloot-3d-card:nth-child(even){transform:perspective(650px) rotateX(5deg) rotateZ(1deg)}
+.baloot-3d-card:active{transform:translateY(-12px) perspective(650px) rotateX(0);box-shadow:0 18px 20px #000b!important}
+.baloot-3d-card strong{align-self:center;font-size:clamp(24px,6vw,34px)}
+.baloot-3d-card i{font-style:normal;font-size:10px;align-self:flex-end;transform:rotate(180deg)}
+.baloot-casino-footer{padding-top:10px;border-top:1px solid #c4a36b44;color:#d6c49b;font-size:9px;letter-spacing:.5px}
+@media(max-width:420px){.baloot-3d-table{min-height:330px;border-width:8px}.baloot-3d-card{height:88px}.baloot-casino-footer{font-size:8px}}
