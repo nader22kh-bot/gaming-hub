@@ -120,3 +120,8 @@ button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
 .streak-card p{margin:12px 0 0;color:#b9c5d9;font-size:11px;line-height:1.5}
 .streak-placeholder{grid-column:1/-1;text-align:center;color:#9aa6bd}
 body.rtl .streak-best{text-align:left}
+
+/* Daily login reward milestones */
+.daily-reward-info{margin-top:13px;padding:12px 13px;border:1px solid #7862b8;border-radius:13px;background:linear-gradient(110deg,#302653,#1a2940)}
+.daily-reward-info strong{display:block;color:#ffe09a;font-size:11px;margin-bottom:5px}
+.daily-reward-info p{margin:0;color:#d5dcef;font-size:10px;line-height:1.7}
