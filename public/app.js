@@ -282,7 +282,7 @@ async function openBalootShop(){
  $("shopBack").onclick=openBaloot;
 }
 window.refreshGamingHub = async newPoints => { if (Number.isFinite(Number(newPoints))) { points = Number(newPoints); $("points").textContent = points; } await loadLeaderboard(); };
-document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord,baloot:openBaloot,basra:window.startBasraGame,crash:window.startCrashGame}[b.dataset.game])());
+document.querySelectorAll("[data-game]").forEach(b=>b.addEventListener("click",()=>{const games={quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord,baloot:openBaloot,basra:window.startBasraGame,crash:window.startCrashGame};const launch=games[b.dataset.game];if(typeof launch!=="function"){console.error("Game launcher unavailable:",b.dataset.game);alert(lang==="ar"?"تعذر تحميل اللعبة. أغلق التطبيق وافتحه مجدداً.":"Game failed to load. Please close and reopen the app.");return;}try{launch();}catch(error){console.error("Game launch failed:",b.dataset.game,error);alert(lang==="ar"?"حدث خطأ أثناء فتح اللعبة. حاول مرة أخرى.":"There was an error opening the game. Please try again.");}}));
 $("langBtn").onclick=()=>setLang(lang==="en"?"ar":"en");
 $("rewardAdBtn").onclick=showRewardedAd;
 $("playNow").onclick=()=>startQuiz();
