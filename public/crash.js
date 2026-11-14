@@ -11,7 +11,7 @@
     if (!content || !modal) throw new Error("Game window is unavailable");
     content.innerHTML = `
       <section class="crash-game" dir="${isArabic() ? "rtl" : "ltr"}">
-        <header class="crash-top"><strong>🚀 CRASH ARENA</strong><span class="crash-live">● SERVER ROUND</span></header>
+        <header class="crash-top"><strong>🚀 CRASH ARENA</strong><div class="crash-head-actions"><span class="crash-live">● SERVER ROUND</span><button type="button" class="crash-sound" id="crashSound" aria-pressed="true">🔊 ${tr("SOUND ON","الصوت يعمل")}</button></div></header>
         <p class="muted">${tr("Watch the multiplier rise. Cash out before the crash!","راقب ارتفاع المعامل واسحب قبل الانفجار!")}</p>
         <div class="crash-stage" id="crashStage">
           <div class="crash-stars">✦　·　✧　·　✦　·　✧</div>
@@ -61,7 +61,7 @@
     let crashAt = 0;
     let startedAt = 0;
     let multiplierValue = 1;
-    let bestValue = 1;
+    let bestValue = 1;\n    let soundEnabled = true;\n    let audioContext = null;
 
     const startButton = byId("crashStart");
     const cashButton = byId("crashCashout");
@@ -70,7 +70,7 @@
     const multiplier = byId("crashMultiplier");
     const status = byId("crashStatus");
     const trail = byId("crashTrail");
-    const progress = byId("crashProgress");
+    const progress = byId("crashProgress");\n    const soundButton = byId("crashSound");\n\n    function getAudioContext() {\n      const AudioCtor = window.AudioContext || window.webkitAudioContext;\n      if (!AudioCtor) return null;\n      if (!audioContext) audioContext = new AudioCtor();\n      if (audioContext.state === "suspended") audioContext.resume().catch(() => {});\n      return audioContext;\n    }\n\n    function tone(frequency, duration, type, volume, endFrequency, delay) {\n      if (!soundEnabled) return;\n      const ctx = getAudioContext();\n      if (!ctx) return;\n      const start = ctx.currentTime + (delay || 0);\n      const oscillator = ctx.createOscillator();\n      const gain = ctx.createGain();\n      oscillator.type = type || "sine";\n      oscillator.frequency.setValueAtTime(frequency, start);\n      if (endFrequency) oscillator.frequency.exponentialRampToValueAtTime(Math.max(30, endFrequency), start + duration);\n      gain.gain.setValueAtTime(0.0001, start);\n      gain.gain.exponentialRampToValueAtTime(volume || 0.08, start + 0.015);\n      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);\n      oscillator.connect(gain); gain.connect(ctx.destination);\n      oscillator.start(start); oscillator.stop(start + duration + 0.03);\n    }\n\n    function playLaunch() { tone(330, .16, "triangle", .07, 660); tone(660, .2, "sine", .05, 880, .13); }\n    function playCashout() { tone(523, .18, "sine", .08); tone(659, .18, "sine", .08, 784, .16); tone(784, .28, "sine", .07, 1047, .32); }\n    function playCrash() { tone(220, .42, "sawtooth", .09, 65); tone(110, .5, "triangle", .08, 45, .2); }\n\n    soundButton.addEventListener("click", () => {\n      soundEnabled = !soundEnabled;\n      soundButton.textContent = soundEnabled ? "🔊 " + tr("SOUND ON", "الصوت يعمل") : "🔇 " + tr("SOUND OFF", "الصوت مكتوم");\n      soundButton.setAttribute("aria-pressed", String(soundEnabled));\n      if (soundEnabled) { getAudioContext(); tone(660, .12, "sine", .05); }\n    });
 
     function stopTimer() {
       if (intervalId !== null) window.clearInterval(intervalId);
@@ -101,7 +101,7 @@
         }
         roundId = result.roundId;
         crashAt = Number(result.crashAt);
-        startedAt = Date.now();
+        startedAt = Date.now();\n        playLaunch();
         multiplierValue = 1;
         active = true;
         stage.classList.remove("crashed", "cashed");
