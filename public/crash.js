@@ -104,12 +104,43 @@
     function playCashout() { tone(523, .18, "sine", .08); tone(659, .18, "sine", .08, 784, .16); tone(784, .28, "sine", .07, 1047, .32); }
     function playCrash() { tone(220, .42, "sawtooth", .09, 65); tone(110, .5, "triangle", .08, 45, .2); }
 
+    // Original futuristic lounge soundtrack for Crash (distinct from Basra).
+    let musicTimer = null;
+    let musicStep = 0;
+    const crashMelody = [392, 494, 587, 494, 440, 587, 659, 587, 392, 494, 659, 784, 659, 587, 494, 440];
+    function playCrashMusicStep() {
+      if (!soundEnabled) return;
+      const note = crashMelody[musicStep % crashMelody.length];
+      tone(note, .34, "triangle", .025, note * 1.015);
+      if (musicStep % 4 === 0) tone(note / 2, .62, "sine", .032, note / 2 * .99);
+      if (musicStep % 8 === 4) tone(note * 1.5, .2, "sine", .012, note * 1.52, .08);
+      musicStep++;
+    }
+    function startCrashMusic() {
+      if (!soundEnabled || musicTimer !== null) return;
+      getAudioContext();
+      playCrashMusicStep();
+      musicTimer = window.setInterval(playCrashMusicStep, 520);
+    }
+    function stopCrashMusic() {
+      if (musicTimer !== null) window.clearInterval(musicTimer);
+      musicTimer = null;
+    }
+
     soundButton.addEventListener("click", () => {
       soundEnabled = !soundEnabled;
       soundButton.textContent = soundEnabled ? "🔊 " + tr("SOUND ON", "الصوت يعمل") : "🔇 " + tr("SOUND OFF", "الصوت مكتوم");
       soundButton.setAttribute("aria-pressed", String(soundEnabled));
-      if (soundEnabled) { getAudioContext(); tone(660, .12, "sine", .05); }
+      if (soundEnabled) { getAudioContext(); tone(660, .12, "sine", .05); startCrashMusic(); } else { stopCrashMusic(); }
     });
+
+    startCrashMusic();
+    const modalObserver = new MutationObserver(() => {
+      const modal = byId("gameModal");
+      if (!modal || modal.classList.contains("hidden")) { stopCrashMusic(); modalObserver.disconnect(); }
+    });
+    const observedModal = byId("gameModal");
+    if (observedModal) modalObserver.observe(observedModal, { attributes: true, attributeFilter: ["class"] });
 
     function stopTimer() {
       if (intervalId !== null) window.clearInterval(intervalId);
