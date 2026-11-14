@@ -254,25 +254,53 @@ function showBalootLobby(balance){
 }
 function startBalootStage(){
  let hand=Array.from({length:5},()=>({...balootCards[Math.floor(Math.random()*balootCards.length)],s:balootSuits[Math.floor(Math.random()*4)]}));
- let wins=0,round=0,locked=false;
- function render(){
-  showModal(`<div class="baloot-screen"><div class="baloot-top"><span>🃏 STAGE ${balootStage}</span><span>${round}/5</span></div><h2>${lang==="ar"?"اختر ورقتك":"Choose your card"}</h2><p class="muted">${lang==="ar"?"الفوز بالجولة يكون بالورقة الأعلى قيمة.":"Play the higher card to win the trick."}</p><div class="baloot-score">${lang==="ar"?"انتصاراتك":"Your wins"} <b>${wins}</b> / 5</div><div class="baloot-hand">${hand.map((c,i)=>`<button class="playing-card ${["♥","♦"].includes(c.s)?"red-card":""}" data-card="${i}"><small>${c.n}</small><strong>${c.s}</strong></button>`).join("")}</div><p id="balootFeedback" class="muted">${lang==="ar"?"اختر ورقة للعب":"Tap a card to play"}</p></div>`);
-  document.querySelectorAll("[data-card]").forEach(b=>b.onclick=async()=>{
-   if(locked)return;locked=true;
-   const idx=Number(b.dataset.card),chosen=hand.splice(idx,1)[0],ai=balootCards[Math.floor(Math.random()*balootCards.length)];
-   const won=chosen.v>=ai.v;if(won)wins++;round++;
-   const fb=$("balootFeedback");if(fb)fb.textContent=(lang==="ar"?"ورقتك ":"Your card ")+chosen.n+chosen.s+" · "+(lang==="ar"?"الخصم ":"Opponent ")+ai.n+(won?(lang==="ar"?" — فزت بالجولة!":" — You won the trick!"):(lang==="ar"?" — خسرْت الجولة":" — Opponent wins"));
-   if(round===5){
-    setTimeout(async()=>{
-     if(wins>=3){
-      try{const r=await fetch("/api/baloot/complete",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:JSON.stringify({stage:balootStage})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not save stage");points=d.points;$("points").textContent=points;balootStage=d.stage;await loadLeaderboard();showModal(`<div class="baloot-screen"><h2>🏆 ${lang==="ar"?"اجتزت المرحلة!":"Stage cleared!"}</h2><div class="big-number">🎁 +25</div><p>${lang==="ar"?"أحسنت! حصلت على 25 نقطة.":"Great play! You earned 25 points."}</p><button class="game-action" id="balootNext">${lang==="ar"?"المرحلة التالية":"Next stage"}</button></div>`);$("balootNext").onclick=openBaloot;
-      }catch(e){showModal("<h2>⚠️</h2><p>"+escapeHtml(e.message)+"</p><button class='answer' id='backBaloot'>Back</button>");$("backBaloot").onclick=openBaloot;}
-     }else{showModal(`<div class="baloot-screen"><h2>${lang==="ar"?"حاول مرة أخرى":"Try again"}</h2><p>${lang==="ar"?"تحتاج للفوز بثلاث جولات على الأقل.":"Win at least 3 of 5 tricks to clear this stage."}</p><button class="game-action" id="balootRetry">${lang==="ar"?"أعد المرحلة":"Retry stage"}</button></div>`);$("balootRetry").onclick=startBalootStage;}
-    },650);
-   }else{setTimeout(render,700);}
-  });
+ let cpuHand=Array.from({length:5},()=>({...balootCards[Math.floor(Math.random()*balootCards.length)],s:balootSuits[Math.floor(Math.random()*4)]}));
+ let wins=0,round=0,locked=false,audio=null,musicTimer=null,musicStep=0,soundOn=true;
+ const melody=[392,440,494,587,494,440,392,330,392,494,587,659,587,494,440,392];
+ function audioCtx(){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;if(!audio)audio=new C();if(audio.state==="suspended")audio.resume().catch(()=>{});return audio;}
+ function note(freq,dur=.32,vol=.035,type="triangle",delay=0){if(!soundOn)return;const c=audioCtx();if(!c)return;const o=c.createOscillator(),g=c.createGain(),at=c.currentTime+delay;o.type=type;o.frequency.setValueAtTime(freq,at);g.gain.setValueAtTime(.0001,at);g.gain.exponentialRampToValueAtTime(vol,at+.025);g.gain.exponentialRampToValueAtTime(.0001,at+dur);o.connect(g);g.connect(c.destination);o.start(at);o.stop(at+dur+.04);}
+ function musicStepPlay(){if(!soundOn)return;const f=melody[musicStep%melody.length];note(f,.42,.024);if(musicStep%4===0)note(f/2,.65,.028,"sine");if(musicStep%8===6)note(f*1.5,.2,.012,"sine",.08);musicStep++;}
+ function startMusic(){if(!soundOn||musicTimer!==null)return;audioCtx();musicStepPlay();musicTimer=setInterval(musicStepPlay,560);}
+ function stopMusic(){if(musicTimer!==null)clearInterval(musicTimer);musicTimer=null;}
+ function sfx(kind){if(kind==="deal"){note(440,.09,.045,"triangle");note(587,.11,.035,"triangle",.09);}else if(kind==="play"){note(520,.08,.04,"triangle");}else if(kind==="win"){note(523,.14,.05);note(659,.14,.05,"triangle",.13);note(784,.22,.05,"triangle",.26);}else{note(220,.2,.045,"sawtooth",0);}}
+ function cardHtml(c,idx,disabled=false){return `<button class="playing-card baloot-3d-card ${["♥","♦"].includes(c.s)?"red-card":""}" data-card="${idx}" ${disabled?"disabled":""}><small>${c.n}</small><strong>${c.s}</strong><i>${c.n}</i></button>`;}
+ function render(lastUser=null,lastCpu=null,message=""){
+  showModal(`<div class="baloot-casino" dir="${lang==="ar"?"rtl":"ltr"}">
+   <div class="baloot-casino-head"><div><span>♛ BALOOT ROYALE</span><small>${lang==="ar"?"المرحلة":"STAGE"} ${balootStage} · ${round}/5</small></div><button id="balootSound" class="baloot-sound">🔊 ${lang==="ar"?"الصوت يعمل":"SOUND ON"}</button></div>
+   <div class="baloot-casino-score"><span>🏆 ${lang==="ar"?"انتصاراتك":"YOUR WINS"} <b>${wins}</b> / 5</span><span>🤖 ${lang==="ar"?"الكمبيوتر":"CPU"}</span></div>
+   <div class="baloot-3d-table">
+    <div class="baloot-seat baloot-seat-cpu"><div class="baloot-avatar">🤵</div><b>${lang==="ar"?"الكمبيوتر":"CPU PLAYER"}</b><small>${lang==="ar"?"الخصم":"OPPONENT"}</small><div class="baloot-back-cards"><i>♠</i><i>♥</i><i>♣</i></div></div>
+    <div class="baloot-felt-logo">BALOOT <span>♠ ♥ ♦ ♣</span><small>${lang==="ar"?"طاولة اللعب الملكية":"ROYAL CASINO TABLE"}</small></div>
+    <div class="baloot-played-pair">
+     <div class="baloot-played-slot">${lastCpu?cardHtml(lastCpu,0,true):"<span>🤖</span>"}<small>${lang==="ar"?"الكمبيوتر":"CPU"}</small></div>
+     <div class="baloot-vs">VS</div>
+     <div class="baloot-played-slot">${lastUser?cardHtml(lastUser,0,true):"<span>🂠</span>"}<small>${lang==="ar"?"أنت":"YOU"}</small></div>
+    </div>
+   </div>
+   <p class="baloot-turn-message" id="balootFeedback">${message|| (lang==="ar"?"اختر ورقة من يدك للعب ضد الكمبيوتر":"Choose a card to play against the computer")}</p>
+   <div class="baloot-player-caption"><span>👑 ${lang==="ar"?"يدك":"YOUR HAND"}</span><small>${hand.length} ${lang==="ar"?"أوراق":"CARDS"}</small></div>
+   <div class="baloot-hand baloot-casino-hand">${hand.map((c,i)=>cardHtml(c,i)).join("")}</div>
+   <div class="baloot-casino-footer"><span>🪙 ${lang==="ar"?"مكافأة المرحلة":"STAGE REWARD"}: 25</span><span>${lang==="ar"?"أفضل من 5 جولات":"BEST OF 5 TRICKS"}</span></div>
+  </div>`);
+  const sb=$("balootSound");
+  sb.onclick=()=>{soundOn=!soundOn;sb.textContent=(soundOn?"🔊 ":"🔇 ")+(lang==="ar"?(soundOn?"الصوت يعمل":"الصوت مكتوم"):(soundOn?"SOUND ON":"SOUND OFF"));if(soundOn){audioCtx();startMusic();note(660,.12,.04);}else stopMusic();};
+  document.querySelectorAll(".baloot-casino-hand [data-card]").forEach(b=>b.onclick=()=>playCard(Number(b.dataset.card)));
  }
- render();
+ function playCard(idx){
+  if(locked||!hand[idx])return;locked=true;audioCtx();const chosen=hand.splice(idx,1)[0],cpuIndex=Math.floor(Math.random()*cpuHand.length),cpu=cpuHand.splice(cpuIndex,1)[0];
+  sfx("play");const won=chosen.v>=cpu.v;if(won)wins++;round++;
+  const msg=(lang==="ar"?"ورقتك ":"Your card ")+chosen.n+chosen.s+" · "+(lang==="ar"?"ورقة الكمبيوتر ":"CPU card ")+cpu.n+cpu.s+" — "+(won?(lang==="ar"?"فزت بالجولة!":"You won this trick!"):(lang==="ar"?"فاز الكمبيوتر":"CPU wins this trick"));
+  render(chosen,cpu,msg);sfx(won?"win":"lose");
+  if(round===5){setTimeout(async()=>{
+    stopMusic();
+    if(wins>=3){
+     try{const r=await fetch("/api/baloot/complete",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:JSON.stringify({stage:balootStage})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not save stage");points=d.points;$("points").textContent=points;balootStage=d.stage;await loadLeaderboard();showModal(`<div class="baloot-screen"><h2>🏆 ${lang==="ar"?"اجتزت المرحلة!":"Stage cleared!"}</h2><div class="big-number">🎁 +25</div><p>${lang==="ar"?"أحسنت! حصلت على 25 نقطة.":"Great play! You earned 25 points."}</p><button class="game-action" id="balootNext">${lang==="ar"?"المرحلة التالية":"Next stage"}</button></div>`);$("balootNext").onclick=openBaloot;
+     }catch(e){showModal("<h2>⚠️</h2><p>"+escapeHtml(e.message)+"</p><button class='answer' id='backBaloot'>Back</button>");$("backBaloot").onclick=openBaloot;}
+    }else{showModal(`<div class="baloot-screen"><h2>${lang==="ar"?"حاول مرة أخرى":"Try again"}</h2><p>${lang==="ar"?"تحتاج للفوز بثلاث جولات على الأقل.":"Win at least 3 of 5 tricks to clear this stage."}</p><button class="game-action" id="balootRetry">${lang==="ar"?"أعد المرحلة":"Retry stage"}</button></div>`);$("balootRetry").onclick=startBalootStage;}
+   },850);}else{setTimeout(()=>{locked=false;render();},850);}
+ }
+ render();sfx("deal");startMusic();
+ const modalEl=$("gameModal");const observer=new MutationObserver(()=>{if(!modalEl||modalEl.classList.contains("hidden")){stopMusic();observer.disconnect();}});if(modalEl)observer.observe(modalEl,{attributes:true,attributeFilter:["class"]});
 }
 async function openBalootShop(){
  const items=[{id:"felt_green",name:"Green felt table",ar:"طاولة مخملية خضراء",cost:100,icon:"🟩"},{id:"gold_deck",name:"Golden card deck",ar:"أوراق ذهبية",cost:250,icon:"✨"},{id:"royal_frame",name:"Royal avatar frame",ar:"إطار ملكي للصورة",cost:400,icon:"👑"},{id:"desert_table",name:"Desert night table",ar:"طاولة ليلة الصحراء",cost:600,icon:"🌙"}];
