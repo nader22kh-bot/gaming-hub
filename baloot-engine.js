@@ -173,3 +173,57 @@ export function publicMatchState(state, viewerId) {
     }))
   };
 }
+
+
+/**
+ * CPU bidding heuristic for a four-seat Baloot table.
+ * Returns a legal bid object; the server remains the source of truth.
+ */
+export function chooseAiBid(hand, state, seat) {
+  if (state.contract) return { type: "pass" };
+  const points = hand.reduce((sum, card) => sum + SUN_POINTS[card.rank], 0);
+  const aces = hand.filter(card => card.rank === "A").length;
+  const kings = hand.filter(card => card.rank === "K").length;
+  const sunStrength = points + aces * 2 + kings;
+  const suitStrength = SUITS.map(suit => {
+    const cards = hand.filter(card => card.suit === suit);
+    const trumpPower = cards.reduce((sum, card) => sum + ({
+      J: 8, "9": 6, A: 4, "10": 3, K: 2, Q: 1, "8": 0, "7": 0
+    }[card.rank]), 0);
+    return { suit, cards, score: trumpPower + Math.max(0, cards.length - 2) * 2 };
+  }).sort((a, b) => b.score - a.score);
+  const bestTrump = suitStrength[0];
+  if (bestTrump.cards.length >= 3 && bestTrump.score >= 10) {
+    return { type: "hokom", trumpSuit: bestTrump.suit };
+  }
+  if (sunStrength >= 43) return { type: "sun" };
+  return { type: "pass" };
+}
+
+/** Selects a legal card with a simple partner-aware trick heuristic. */
+export function chooseAiCard(hand, trick, contract, seat) {
+  const legal = legalCards(hand, trick, contract);
+  if (legal.length === 1) return legal[0];
+  if (!trick.length) {
+    return [...legal].sort((a, b) =>
+      cardPoints(a, contract) - cardPoints(b, contract) ||
+      rankValue(a, contract) - rankValue(b, contract)
+    )[0];
+  }
+  const currentWinner = winningPlay(trick, contract);
+  const partnerWinning = currentWinner.seat % 2 === seat % 2;
+  const ranked = legal.map(card => {
+    const candidate = [...trick, { seat, card }];
+    const winner = winningPlay(candidate, contract);
+    const wins = winner.seat === seat;
+    return { card, wins, points: cardPoints(card, contract), rank: rankValue(card, contract) };
+  });
+  if (partnerWinning) {
+    return ranked.sort((a, b) => a.points - b.points || a.rank - b.rank)[0].card;
+  }
+  const winningCards = ranked.filter(x => x.wins).sort((a, b) =>
+    a.points - b.points || a.rank - b.rank
+  );
+  if (winningCards.length) return winningCards[0].card;
+  return ranked.sort((a, b) => a.points - b.points || a.rank - b.rank)[0].card;
+}
