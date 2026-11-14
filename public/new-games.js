@@ -87,13 +87,16 @@
     function playBasraNote(){
       if(!musicOn||!musicContext)return;
       const now=musicContext.currentTime, freq=musicNotes[musicStep++%musicNotes.length];
-      const osc=musicContext.createOscillator(), gain=musicContext.createGain();
-      osc.type="sine";osc.frequency.setValueAtTime(freq,now);
-      gain.gain.setValueAtTime(0.0001,now);
-      gain.gain.linearRampToValueAtTime(0.025,now+0.08);
-      gain.gain.exponentialRampToValueAtTime(0.0001,now+1.05);
-      osc.connect(gain);gain.connect(musicContext.destination);
-      osc.start(now);osc.stop(now+1.1);
+      // Layered, original oriental lounge motif: warm lead, soft bass and a shimmering upper note.
+      [[freq,"triangle",0.075,1.35],[freq/2,"sine",0.045,1.8],[freq*2,"sine",0.018,0.85]].forEach(([hz,wave,level,duration])=>{
+        const osc=musicContext.createOscillator(), gain=musicContext.createGain();
+        osc.type=wave;osc.frequency.setValueAtTime(hz,now);
+        gain.gain.setValueAtTime(0.0001,now);
+        gain.gain.linearRampToValueAtTime(level,now+0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001,now+duration);
+        osc.connect(gain);gain.connect(musicContext.destination);
+        osc.start(now);osc.stop(now+duration+0.03);
+      });
     }
     function toggleBasraMusic(){
       const AudioCtor=window.AudioContext||window.webkitAudioContext;
@@ -165,6 +168,8 @@
       cpuTurn();
     }
     deal();
+    // The game is opened by a player tap, so attempt to start music immediately.
+    toggleBasraMusic();
   }
   window.startCrashGame=crash;
   window.startBasraGame=basra;
