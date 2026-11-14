@@ -540,36 +540,104 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-app.post('/api/adsgram/reward', requireTelegramUser, async (req,res) => {
-  const claimId=String(req.body?.claimId||'');
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(claimId)){
-    return res.status(400).json({error:'Invalid reward claim.'});
+// Monetag rewarded-interstitial flow. Rewards are granted ONLY by the authenticated Monetag postback.
+app.post('/api/monetag/start', requireTelegramUser, async (req, res) => {
+  const user = req.telegramUser, userId = String(user.id);
+  if (!process.env.MONETAG_POSTBACK_SECRET || !process.env.MONETAG_ZONE_ID) {
+    return res.status(503).json({ error: 'Monetag rewards are not configured on the server yet.' });
   }
-  const user=req.telegramUser, userId=String(user.id), client=await pool.connect();
-  try{
-    await client.query('BEGIN');
-    await client.query(
-      'INSERT INTO players (telegram_id,username,first_name,points) VALUES ($1,$2,$3,120) ON CONFLICT (telegram_id) DO NOTHING',
-      [userId,user.username||null,user.first_name||null]
+  try {
+    const count = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM monetag_reward_shows WHERE telegram_id=$1 AND status='rewarded' AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Riyadh') AT TIME ZONE 'Asia/Riyadh')",
+      [userId]
     );
-    const player=await client.query('SELECT points FROM players WHERE telegram_id=$1 FOR UPDATE',[userId]);
-    const vip=await client.query("SELECT expires_at FROM vip_subscriptions WHERE telegram_id=$1 AND status='active'",[userId]);
-    if(vip.rows[0]&&new Date(vip.rows[0].expires_at)>new Date()){
-      await client.query('ROLLBACK');return res.status(403).json({error:'VIP members do not need to watch ads.'});
-    }
-    const duplicate=await client.query('SELECT 1 FROM adsgram_reward_claims WHERE claim_id=$1',[claimId]);
-    if(duplicate.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'This ad reward was already claimed.'});}
-    const daily=await client.query('SELECT COUNT(*)::int AS count FROM adsgram_reward_claims WHERE telegram_id=$1 AND claimed_on=CURRENT_DATE',[userId]);
-    if(daily.rows[0].count>=5){await client.query('ROLLBACK');return res.status(429).json({error:'Daily ad reward limit reached. Please try again tomorrow.'});}
-    const awarded=20;
-    await client.query('INSERT INTO adsgram_reward_claims (claim_id,telegram_id,awarded) VALUES ($1,$2,$3)',[claimId,userId,awarded]);
-    const updated=await client.query('UPDATE players SET points=points+$2,username=$3,first_name=$4,updated_at=NOW() WHERE telegram_id=$1 RETURNING points',[userId,awarded,user.username||null,user.first_name||null]);
-    await client.query('COMMIT');
-    res.json({accepted:true,awarded,points:updated.rows[0].points,dailyLimit:5});
-  }catch(error){
-    await client.query('ROLLBACK');console.error('AdsGram reward failed:',error);res.status(500).json({error:'Could not save ad reward.'});
-  }finally{client.release();}
+    if (count.rows[0].count >= 5) return res.status(429).json({ error: 'Daily ad reward limit reached. Try again tomorrow.' });
+    const ymid = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO monetag_reward_shows (ymid,telegram_id,status) VALUES ($1,$2,'pending')",
+      [ymid,userId]
+    );
+    res.json({ ymid });
+  } catch (error) {
+    console.error('Monetag show creation failed:', error);
+    res.status(500).json({ error: 'Could not start a rewarded ad.' });
+  }
 });
+
+app.get('/api/monetag/status', requireTelegramUser, async (req, res) => {
+  const ymid = String(req.query.ymid || '');
+  if (!/^[0-9a-f-]{36}$/i.test(ymid)) return res.status(400).json({ error: 'Invalid ad reference.' });
+  try {
+    const result = await pool.query(
+      "SELECT status FROM monetag_reward_shows WHERE ymid=$1 AND telegram_id=$2",
+      [ymid,String(req.telegramUser.id)]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Ad reference not found.' });
+    if (result.rows[0].status === 'rewarded') {
+      const player = await pool.query('SELECT points FROM players WHERE telegram_id=$1',[String(req.telegramUser.id)]);
+      return res.json({ status: 'rewarded', points: Number(player.rows[0]?.points || 0) });
+    }
+    res.json({ status: result.rows[0].status });
+  } catch (error) {
+    console.error('Monetag status check failed:', error);
+    res.status(500).json({ error: 'Could not check ad reward status.' });
+  }
+});
+
+app.get('/api/monetag/postback', async (req, res) => {
+  const expectedSecret = process.env.MONETAG_POSTBACK_SECRET || '';
+  const suppliedSecret = String(req.query.secret || '');
+  if (!expectedSecret || suppliedSecret.length !== expectedSecret.length ||
+      !crypto.timingSafeEqual(Buffer.from(suppliedSecret), Buffer.from(expectedSecret))) {
+    return res.status(403).send('Forbidden');
+  }
+  const { ymid, zone_id: zoneId, event_type: eventType, reward_event_type: rewardType, estimated_price: estimatedPrice, telegram_id: telegramId } = req.query;
+  if (!ymid || !/^[0-9a-f-]{36}$/i.test(String(ymid)) || String(zoneId || '') !== String(process.env.MONETAG_ZONE_ID)) {
+    return res.status(400).send('Invalid postback');
+  }
+  if (String(eventType || '') !== 'impression' || String(rewardType || '') !== 'valued') {
+    return res.status(200).send('No reward');
+  }
+  const price = Number(estimatedPrice || 0);
+  if (!Number.isFinite(price) || price < 0) return res.status(400).send('Invalid price');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const show = await client.query('SELECT telegram_id,status FROM monetag_reward_shows WHERE ymid=$1 FOR UPDATE',[String(ymid)]);
+    if (!show.rowCount) { await client.query('ROLLBACK'); return res.status(404).send('Unknown ymid'); }
+    if (telegramId && String(telegramId) !== String(show.rows[0].telegram_id)) {
+      await client.query('ROLLBACK'); return res.status(403).send('Telegram user mismatch');
+    }
+    if (show.rows[0].status === 'rewarded') {
+      await client.query('COMMIT'); return res.status(200).send('Already processed');
+    }
+    const userId = String(show.rows[0].telegram_id);
+    const daily = await client.query(
+      "SELECT COUNT(*)::int AS count FROM monetag_reward_shows WHERE telegram_id=$1 AND status='rewarded' AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Riyadh') AT TIME ZONE 'Asia/Riyadh')",
+      [userId]
+    );
+    if (daily.rows[0].count >= 5) {
+      await client.query("UPDATE monetag_reward_shows SET status='rejected' WHERE ymid=$1",[String(ymid)]);
+      await client.query('COMMIT'); return res.status(200).send('Daily limit reached');
+    }
+    await client.query(
+      "INSERT INTO players (telegram_id,points) VALUES ($1,140) ON CONFLICT (telegram_id) DO UPDATE SET points=players.points+20,updated_at=NOW()",
+      [userId]
+    );
+    await client.query(
+      "UPDATE monetag_reward_shows SET status='rewarded',estimated_price=$2,rewarded_at=NOW() WHERE ymid=$1",
+      [String(ymid),price]
+    );
+    await client.query('COMMIT');
+    return res.status(200).send('Rewarded');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Monetag postback failed:', error);
+    return res.status(500).send('Temporary error');
+  } finally { client.release(); }
+});
+
+app.post('/api/adsgram/reward', (_req, res) => res.status(410).json({ error: 'Adsgram rewards are disabled.' }));
 
 
 app.post('/api/crash/start', requireTelegramUser, async (req, res) => {
@@ -751,6 +819,17 @@ async function start() {
       PRIMARY KEY (telegram_id, item_id)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS monetag_reward_shows (
+      ymid TEXT PRIMARY KEY,
+      telegram_id BIGINT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','rewarded','rejected')),
+      estimated_price NUMERIC(14,8) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      rewarded_at TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS monetag_reward_shows_user_created_idx ON monetag_reward_shows (telegram_id, created_at DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS adsgram_reward_claims (
       claim_id UUID PRIMARY KEY,
