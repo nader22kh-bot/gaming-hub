@@ -281,7 +281,8 @@ async function openBalootShop(){
  document.querySelectorAll("[data-buy]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await fetch("/api/baloot/shop",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg?.initData||""},body:JSON.stringify({item:b.dataset.buy})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Purchase failed");points=d.points;$("points").textContent=points;balootInventory=d.inventory;openBalootShop();}catch(e){alert(e.message);b.disabled=false;}});
  $("shopBack").onclick=openBaloot;
 }
-document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord,baloot:openBaloot}[b.dataset.game])());
+window.refreshGamingHub = async newPoints => { if (Number.isFinite(Number(newPoints))) { points = Number(newPoints); $("points").textContent = points; } await loadLeaderboard(); };
+document.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>({quiz:startQuiz,memory:startMemory,reaction:startReaction,puzzle:startPuzzle,word:startWord,baloot:openBaloot,basra:window.startBasraGame,crash:window.startCrashGame}[b.dataset.game])());
 $("langBtn").onclick=()=>setLang(lang==="en"?"ar":"en");
 $("rewardAdBtn").onclick=showRewardedAd;
 $("playNow").onclick=()=>startQuiz();
