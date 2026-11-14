@@ -226,3 +226,15 @@ body.rtl .streak-best{text-align:left}
 .baloot-3d-card i{font-style:normal;font-size:10px;align-self:flex-end;transform:rotate(180deg)}
 .baloot-casino-footer{padding-top:10px;border-top:1px solid #c4a36b44;color:#d6c49b;font-size:9px;letter-spacing:.5px}
 @media(max-width:420px){.baloot-3d-table{min-height:330px;border-width:8px}.baloot-3d-card{height:88px}.baloot-casino-footer{font-size:8px}}
+
+/* Four-seat Saudi Baloot table layout */
+.baloot-3d-table>.baloot-seat{position:absolute;min-width:76px}
+.baloot-3d-table>.baloot-seat:nth-child(1){bottom:8px;left:50%;transform:translateX(-50%)}
+.baloot-3d-table>.baloot-seat:nth-child(2){right:7px;top:39%;transform:translateY(-50%)}
+.baloot-3d-table>.baloot-seat:nth-child(3){top:7px;left:50%;transform:translateX(-50%)}
+.baloot-3d-table>.baloot-seat:nth-child(4){left:7px;top:39%;transform:translateY(-50%)}
+.baloot-3d-table>.baloot-felt-logo{top:43%;font-size:clamp(15px,3vw,24px)}
+.baloot-3d-table>.baloot-played-pair{position:absolute;top:58%;left:50%;transform:translate(-50%,-50%);width:76%;margin:0;flex-wrap:wrap;gap:7px}
+.baloot-3d-table .trick-card{display:inline-flex;align-items:center;justify-content:center;min-width:43px;min-height:55px;padding:5px;border-radius:7px;background:#fff9e9;color:#18372a;font-size:12px;font-weight:900;box-shadow:0 4px 10px #0008}
+.baloot-3d-table .baloot-seat.active-turn .baloot-avatar{box-shadow:0 0 0 4px #f6d36b,0 0 20px #ffe59a}
+.baloot-3d-table .baloot-seat .baloot-back-cards{font-size:10px}
