@@ -1,5 +1,5 @@
 const tg = window.Telegram?.WebApp;
-let adsgramController = null;
+
 tg?.ready();
 tg?.expand();
 
@@ -94,25 +94,38 @@ async function showRewardedAd(){
   const button=$("rewardAdBtn"), feedback=$("adFeedback");
   if(!tg?.initData){if(feedback)feedback.textContent=lang==="ar"?"افتح اللعبة من تيليجرام أولاً.":"Open the game from Telegram first.";return;}
   if(document.body.classList.contains("vip-member"))return;
-  if(!window.Adsgram){if(feedback)feedback.textContent=lang==="ar"?"تعذر تحميل خدمة الإعلانات. حاول لاحقاً.":"Ads service is unavailable. Please try again.";return;}
-  if(!adsgramController){
-    try{adsgramController=window.Adsgram.init({blockId:"59646"});}
-    catch(error){console.error("AdsGram init failed",error);if(feedback)feedback.textContent=lang==="ar"?"تعذر تهيئة الإعلان.":"Could not initialize the ad.";return;}
+  if(typeof window.show_12265048!=="function"){
+    if(feedback)feedback.textContent=lang==="ar"?"تعذر تحميل SDK الخاص بالإعلانات.":"Monetag SDK is not loaded yet.";
+    return;
   }
   button.disabled=true;
-  if(feedback)feedback.textContent=lang==="ar"?"جارٍ تحميل الإعلان…":"Loading ad…";
+  if(feedback)feedback.textContent=lang==="ar"?"جارٍ تجهيز الإعلان…":"Preparing your ad…";
+  let ymid=null;
   try{
-    const result=await adsgramController.show();
-    if(result?.done!==true)throw new Error("Ad was not completed.");
-    const claimId=crypto.randomUUID();
-    const response=await fetch("/api/adsgram/reward",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg.initData},body:JSON.stringify({claimId})});
-    const data=await response.json();
-    if(!response.ok)throw new Error(data.error||"Reward could not be saved.");
-    points=data.points;$("points").textContent=points;await loadLeaderboard();
-    if(feedback)feedback.textContent=lang==="ar"?`تمت إضافة ${data.awarded} نقطة إلى رصيدك!`:`+ ${data.awarded} points added to your balance!`;
+    const startResponse=await fetch("/api/monetag/start",{method:"POST",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":tg.initData},body:"{}"});
+    const startData=await startResponse.json();
+    if(!startResponse.ok)throw new Error(startData.error||"Could not start ad.");
+    ymid=startData.ymid;
+    if(feedback)feedback.textContent=lang==="ar"?"جارٍ تحميل الإعلان…":"Loading ad…";
+    // The browser result is not trusted for points. Only Monetag's server postback awards points.
+    try{await window.show_12265048({ymid});}catch(adError){console.warn("Monetag SDK result:",adError);}
+    if(feedback)feedback.textContent=lang==="ar"?"تم استلام الإعلان. نتحقق من المكافأة…":"Ad finished. Verifying your reward…";
+    for(let attempt=0;attempt<36;attempt++){
+      await new Promise(resolve=>setTimeout(resolve,2500));
+      const statusResponse=await fetch("/api/monetag/status?ymid="+encodeURIComponent(ymid),{headers:{"X-Telegram-Init-Data":tg.initData}});
+      const statusData=await statusResponse.json();
+      if(!statusResponse.ok)throw new Error(statusData.error||"Could not verify reward.");
+      if(statusData.status==="rewarded"){
+        points=statusData.points;$("points").textContent=points;await loadLeaderboard();
+        if(feedback)feedback.textContent=lang==="ar"?"+20 نقطة أضيفت إلى رصيدك!":"+20 points added to your balance!";
+        return;
+      }
+      if(statusData.status==="rejected")throw new Error(lang==="ar"?"هذه المشاهدة غير مؤهلة للمكافأة.":"This view was not eligible for a reward.");
+    }
+    if(feedback)feedback.textContent=lang==="ar"?"لم يصل تأكيد المكافأة بعد. حدّث رصيدك بعد قليل.":"Reward confirmation is still pending. Check your balance shortly.";
   }catch(error){
-    console.warn("Rewarded ad not completed or reward failed:",error);
-    if(feedback)feedback.textContent=lang==="ar"?"لم تكتمل المشاهدة أو تعذر تسجيل المكافأة.":"Ad not completed or reward could not be saved.";
+    console.warn("Monetag reward flow:",error);
+    if(feedback)feedback.textContent=error.message||"Ad reward could not be verified.";
   }finally{button.disabled=false;}
 }
 
