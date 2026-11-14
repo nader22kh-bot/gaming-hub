@@ -122,6 +122,7 @@
     function finishAsCrash() {
       if (!active) return;
       stopTimer();
+      playCrash();
       stage.classList.add("crashed");
       rocket.textContent = "💥";
       trail.style.opacity = "0";
@@ -131,6 +132,7 @@
 
     startButton.addEventListener("click", async () => {
       if (active || startButton.disabled) return;
+      getAudioContext();
       startButton.disabled = true;
       status.textContent = tr("Preparing a verified round…","جارٍ تجهيز جولة موثوقة…");
       try {
@@ -178,6 +180,7 @@
       try {
         const result = await requestJson("/api/crash/cashout", { roundId: currentRoundId });
         stopTimer();
+        playCashout();
         multiplierValue = Number(result.factor) || multiplierValue;
         multiplier.textContent = multiplierValue.toFixed(2) + "x";
         byId("crashReward").textContent = "+" + Number(result.awarded || 0) + " ⭐";
