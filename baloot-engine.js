@@ -144,8 +144,8 @@ export function applyMatchAction(state, userId, action, actionId) {
         const contractTeam = next.contract.team;
         const score = scoreRound(next.teamPoints, next.contract);
         const winningTeam = score.winningTeam;
-        next.matchPoints[winningTeam] += 1;
-        next.phase = "round_complete";
+        next.matchPoints[winningTeam] += next.contract.type === "sun" ? 26 : 16;
+        next.phase = Math.max(...next.matchPoints) >= next.targetScore ? "match_complete" : "round_complete";
         next.roundResult = { ...score, teamTricks: [...next.teamTricks] };
         event = { type: "round_complete", result: next.roundResult };
       }
@@ -226,4 +226,11 @@ export function chooseAiCard(hand, trick, contract, seat) {
   );
   if (winningCards.length) return winningCards[0].card;
   return ranked.sort((a, b) => a.points - b.points || a.rank - b.rank)[0].card;
+}
+
+/** Start the next deal after a completed round, preserving match score. */
+export function startNextRound(state) {
+  if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
+  if (Math.max(...state.matchPoints) >= state.targetScore) throw new Error("The match is already complete.");
+  return dealNextRound(state);
 }
