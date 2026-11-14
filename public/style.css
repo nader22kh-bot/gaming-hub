@@ -97,3 +97,26 @@ button{cursor:pointer}button:disabled{opacity:.65;cursor:wait}
 @media(max-width:360px){.multi-join{grid-template-columns:1fr}.multi-join .game-action{margin-top:0}}
 
 .ad-slot .game-action{max-width:260px;margin:12px auto 4px;padding:11px 14px;text-align:center}.ad-slot .game-action:disabled{opacity:.6}.ad-slot #adFeedback{display:block;margin-top:6px;font-size:10px}
+
+/* Daily play streak */
+.streak-card{margin:18px 0 24px;padding:17px;border:1px solid #35435f;border-radius:20px;background:linear-gradient(135deg,#1b2940 0%,#211d42 100%);box-shadow:0 12px 28px #0003}
+.streak-card-head,.streak-numbers{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.streak-card-head small,.streak-best small{display:block;color:#aab8d0;font-size:9px;font-weight:800;letter-spacing:1.3px}
+.streak-card-head h2{margin:5px 0 0;font-size:17px}
+.streak-flame{font-size:30px;filter:drop-shadow(0 0 10px #ff9b4266)}
+.streak-numbers{margin:16px 0 14px}
+.streak-numbers>div:first-child{display:flex;align-items:baseline;gap:8px}
+.streak-numbers>div:first-child strong{font-size:34px;line-height:1;color:#ffd18a}
+.streak-numbers>div:first-child span{font-size:11px;color:#d5deed}
+.streak-best{text-align:right;padding:8px 11px;border-radius:12px;background:#ffffff0c}
+.streak-best b{display:block;margin-top:3px;font-size:17px;color:#fff}
+.streak-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.streak-day{min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 2px;border:1px solid #46516a;border-radius:11px;background:#101a2b;color:#9eacc3}
+.streak-day span{font-size:9px;font-weight:700}
+.streak-day b{width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:#29364d;font-size:12px}
+.streak-day.done{border-color:#328c70;background:#14392f;color:#b9f2d8}
+.streak-day.done b{background:#2c956e;color:#fff}
+.streak-day.today{outline:1px solid #f6c477}
+.streak-card p{margin:12px 0 0;color:#b9c5d9;font-size:11px;line-height:1.5}
+.streak-placeholder{grid-column:1/-1;text-align:center;color:#9aa6bd}
+body.rtl .streak-best{text-align:left}
