@@ -106,7 +106,7 @@
         active = true;
         stage.classList.remove("crashed", "cashed");
         rocket.textContent = "🚀";
-        rocket.style.transform = "translateY(0) rotate(0)";
+        rocket.style.transform = "translate(-50%, -50%) rotate(0)";
         trail.style.opacity = "1";
         trail.style.height = "0px";
         progress.style.width = "0%";
@@ -119,7 +119,7 @@
           multiplierValue = Math.exp(elapsed * 0.19);
           multiplier.textContent = multiplierValue.toFixed(2) + "x";
           const rise = Math.min(125, elapsed * 18);
-          rocket.style.transform = "translateY(-" + rise + "px) rotate(-13deg)";
+          rocket.style.transform = "translate(-50%, calc(-50% - " + rise + "px)) rotate(-13deg)";
           trail.style.height = Math.min(115, elapsed * 18) + "px";
           progress.style.width = Math.min(100, (multiplierValue / crashAt) * 100) + "%";
           if (multiplierValue >= crashAt) finishAsCrash();
@@ -147,7 +147,7 @@
         stage.classList.add("cashed");
         status.textContent = tr("CASHED OUT! Points saved.","تم السحب وحُفظت النقاط بنجاح.");
         if (typeof window.refreshGamingHub === "function") {
-          await window.refreshGamingHub(result.points);
+          try { await window.refreshGamingHub(result.points); } catch (_) { /* Reward is already saved by the server. */ }
         }
       } catch (error) {
         stopTimer();
