@@ -125,8 +125,7 @@ const rewards = {
   puzzle_correct: 10,
   word_correct: 10,
   baloot_stage: 25,
-  basra_win: 25,
-  crash_cashout: 10
+  basra_win: 25
 };
 
 if (bot) {
