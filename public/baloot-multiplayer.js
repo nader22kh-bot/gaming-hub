@@ -137,7 +137,7 @@
           </div>`;
       }else if(myTurn&&canRespond&&d.level==="double"&&mySeat.seat===d.buyerSeat){
         controls=`<p>${t("Respond to the double","الرد على الدبل")}</p><div class="multi-controls">
-          <button class="game-action" data-double="three">${t("Three ×3","ثري ×3")}</button>
+          ${d.contractType==="hokom"?`<button class="game-action" data-double="three">${t("Three ×3","ثري ×3")}</button>`:""}
           <button class="answer" data-double="accept">${t("Accept","قبول")}</button></div>`;
       }else if(myTurn&&canRespond&&d.level==="three"&&mySeat.seat===d.doublerSeat){
         controls=`<p>${t("Respond to Three","الرد على الثري")}</p><div class="multi-controls">
@@ -180,6 +180,10 @@
     }
     const isHost=room.hostSeat===mySeat?.seat;
     const ruleCall=room.pendingRuleCall;
+    const liveDoublePanel=room.phase==="playing"&&room.canDouble
+      ? `<div class="multi-controls"><button class="answer" id="multiLiveDouble">${t("Double now","دبل الآن")}</button>
+          <button class="answer" id="multiLiveDoubleClosed">${t("Double · Closed","دبل مقفل")}</button></div>`
+      : "";
     const rulePanel=room.phase==="playing" ? (ruleCall
       ? `<div class="baloot-reward"><b>${t("Table ruling requested","تم طلب حكم الطاولة")}: ${escape(ruleCall.kind)}</b>
           <p>${t("Called by seat","طلبه اللاعب")} ${ruleCall.callerSeat+1} · ${ruleCall.targetSeat===null?"":t("Target seat","اللاعب المعني")+" "+(ruleCall.targetSeat+1)}</p>
@@ -210,13 +214,15 @@
       <div class="multi-trick">${trick}</div>
       ${auction?`<div class="multi-trick">${auction}</div>`:""}
       <p class="muted">${myTurn?t("Your turn","دورك الآن"):t("Waiting for turn","بانتظار دورك")} · ${escape(room.phase)}</p>
-      ${controls}${rulePanel}<p class="muted" id="multiError"></p>
+      ${controls}${liveDoublePanel}${rulePanel}<p class="muted" id="multiError"></p>
     </div>`);
     document.querySelectorAll("[data-bid]").forEach(button=>button.onclick=()=>{
       const action={type:button.dataset.bid};
       if(action.type==="hokom")action.trumpSuit=room.bidRound===1?room.faceUp.suit:$("multiTrump").value;
       send(action);
     });
+    $("multiLiveDouble")?.addEventListener("click",()=>send({type:"call_live_double",locked:false}));
+    $("multiLiveDoubleClosed")?.addEventListener("click",()=>send({type:"call_live_double",locked:true}));
     $("multiCallRule")?.addEventListener("click",()=>{
       const target=$("multiRuleTarget").value;
       send({type:"call_rule",kind:$("multiRuleKind").value,targetSeat:target===""?null:Number(target)});
