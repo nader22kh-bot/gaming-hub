@@ -51,10 +51,11 @@ export function detectProjects(hand, contract, seat = 0) {
   return projects.sort((a,b)=>b.priority-a.priority);
 }
 
-function addSequenceProject(out, length, suit, seat, contractType) {
+function addSequenceProject(out, indexes, suit, seat, contractType) {
+  const length = indexes.length;
   if (length < 3) return;
   const type = length >= 5 ? "hundred" : length === 4 ? "fifty" : "sira";
-  out.push({ type, subtype: "sequence", length, suit, seat,
+  out.push({ type, subtype: "sequence", length, ranks: indexes.map(index => SEQUENCE[index]), suit, seat,
     value: PROJECT_POINTS[contractType][type],
     rawValue: type === "sira" ? 20 : type === "fifty" ? 50 : 100,
     priority: type === "hundred" ? 400 : type === "fifty" ? 200 : 150 });
