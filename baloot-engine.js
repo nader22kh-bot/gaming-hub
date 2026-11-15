@@ -33,6 +33,72 @@ export function cardPoints(card, contract) {
     ? TRUMP_POINTS : SUN_POINTS)[card.rank];
 }
 
+const PROJECT_ORDER = ["A", "K", "Q", "J", "10", "9", "8", "7"];
+const PROJECT_VALUES = {
+  sun: { sara: 4, fifty: 10, hundred: 20, fourHundred: 40 },
+  hokom: { sara: 2, fifty: 5, hundred: 10, fourHundred: 0 }
+};
+function projectStrength(project) {
+  const tier = { sara: 1, fifty: 2, hundred_set: 3, hundred_run: 4, fourHundred: 5 };
+  return [tier[project.kind] || 0, project.highRank ?? -1];
+}
+export function detectProjects(hand, contract) {
+  if (!Array.isArray(hand) || hand.length !== 8) return [];
+  const projects = [];
+  const used = new Set();
+  for (const suit of SUITS) {
+    const cards = hand.filter(card => card.suit === suit)
+      .sort((a,b) => PROJECT_ORDER.indexOf(a.rank) - PROJECT_ORDER.indexOf(b.rank));
+    let run = [];
+    const flush = () => {
+      if (run.length >= 5) projects.push({ kind: "hundred_run", suit, cards: run.map(cardKey), highRank: PROJECT_ORDER.indexOf(run[0].rank) });
+      else if (run.length === 4) projects.push({ kind: "fifty", suit, cards: run.map(cardKey), highRank: PROJECT_ORDER.indexOf(run[0].rank) });
+      else if (run.length === 3) projects.push({ kind: "sara", suit, cards: run.map(cardKey), highRank: PROJECT_ORDER.indexOf(run[0].rank) });
+      if (run.length >= 3) run.forEach(card => used.add(cardKey(card)));
+      run = [];
+    };
+    for (const card of cards) {
+      if (!run.length || PROJECT_ORDER.indexOf(card.rank) === PROJECT_ORDER.indexOf(run[run.length - 1].rank) + 1) run.push(card);
+      else { flush(); run.push(card); }
+    }
+    flush();
+  }
+  const eligibleRanks = ["A","K","Q","J","10"];
+  for (const rank of eligibleRanks) {
+    const cards = hand.filter(card => card.rank === rank && !used.has(cardKey(card)));
+    if (cards.length === 4) {
+      const kind = rank === "A" && contract.type === "sun" ? "fourHundred" : "hundred_set";
+      projects.push({ kind, rank, cards: cards.map(cardKey), highRank: eligibleRanks.indexOf(rank) });
+      cards.forEach(card => used.add(cardKey(card)));
+    }
+  }
+  return projects;
+}
+export function projectValue(project, contractType) {
+  const values = PROJECT_VALUES[contractType];
+  if (!values) throw new Error("Unknown Baloot contract.");
+  if (project.kind === "sara") return values.sara;
+  if (project.kind === "fifty") return values.fifty;
+  if (project.kind === "hundred_run" || project.kind === "hundred_set") return values.hundred;
+  if (project.kind === "fourHundred") return values.fourHundred;
+  return 0;
+}
+export function awardProjects(playerProjects, contractType, dealer) {
+  const all = playerProjects.flatMap((projects, seat) => projects.map(project => ({
+    ...project, seat, team: teamOf(seat), strength: projectStrength(project)
+  })));
+  if (!all.length) return { winnerTeam: null, gamePoints: [0,0], awarded: [] };
+  all.sort((a,b) => {
+    for (let i=0;i<a.strength.length;i++) if (a.strength[i] !== b.strength[i]) return b.strength[i]-a.strength[i];
+    return ((a.seat-(dealer+1)+4)%4)-((b.seat-(dealer+1)+4)%4);
+  });
+  const winnerTeam=all[0].team;
+  const awarded=all.filter(project=>project.team===winnerTeam);
+  const gamePoints=[0,0];
+  for (const project of awarded) gamePoints[winnerTeam]+=projectValue(project,contractType);
+  return { winnerTeam, gamePoints, awarded: awarded.map(({strength,...project})=>project) };
+}
+
 export function contractTargetPoints(contractType) {
   if (contractType === "sun") return 65;
   if (contractType === "hokom") return 81;
