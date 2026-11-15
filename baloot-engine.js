@@ -407,6 +407,22 @@ function applyBid(next, seat, action) {
   return { type: "bid_called", contract };
 }
 
+function balootAnnouncementCard(state, seat) {
+  if (!state.contract || state.contract.type !== "hokom") return null;
+  const candidate = (state.projectCandidatesBySeat?.[seat] || []).find(project => project.type === "baloot");
+  if (!candidate || (state.projectsBySeat?.[seat] || []).some(project => project.type === "baloot")) return null;
+  const plays = [
+    ...(state.tricks || []).flatMap(trick => trick.plays || []),
+    ...(state.trick || [])
+  ].filter(play => play.seat === seat);
+  const kingPlayed = plays.some(play => play.card.suit === state.contract.trumpSuit && play.card.rank === "K");
+  const queenPlayed = plays.some(play => play.card.suit === state.contract.trumpSuit && play.card.rank === "Q");
+  const hand = state.seats[seat]?.hand || [];
+  if (kingPlayed && hand.some(card => card.suit === state.contract.trumpSuit && card.rank === "Q")) return state.contract.trumpSuit + ":Q";
+  if (queenPlayed && hand.some(card => card.suit === state.contract.trumpSuit && card.rank === "K")) return state.contract.trumpSuit + ":K";
+  return null;
+}
+
 export function applyMatchAction(state, userId, action, actionId) {
   if (!actionId || typeof actionId !== "string" || actionId.length > 80) {
     throw new Error("A unique action id is required.");
@@ -481,6 +497,14 @@ export function applyMatchAction(state, userId, action, actionId) {
     const index = hand.findIndex(card => cardKey(card) === action.card);
     if (index < 0) throw new Error("That card is not in your hand.");
     const card = hand[index];
+    if (action.announceBaloot) {
+      const expectedBalootCard = balootAnnouncementCard(next, seat);
+      if (!expectedBalootCard || expectedBalootCard !== cardKey(card)) {
+        throw new Error("Baloot must be announced before playing the second trump King or Queen.");
+      }
+      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []),
+        (next.projectCandidatesBySeat?.[seat] || []).find(project => project.type === "baloot")];
+    }
     const legal = legalCards(hand, next.trick, next.contract, seat);
     if (!legal.some(candidate => cardKey(candidate) === cardKey(card))) {
       throw new Error(next.contract.type === "hokom"
@@ -572,6 +596,7 @@ export function publicMatchState(state, viewerId) {
     })),
     projectWindowOpen: projectDeclarationWindow(state),
     myProjectsDeclared: Boolean(state.projectsDeclaredBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))]),
+    balootAnnouncementCard: balootAnnouncementCard(state, state.seats.findIndex(player => player.userId === String(viewerId))),
     projectResult: state.projectResult || null,
     seats: state.seats.map(player => ({
       name: player.name,
