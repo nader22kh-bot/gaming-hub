@@ -7,7 +7,7 @@ import {
 } from "../baloot-engine.js";
 import { detectProjects } from "../baloot-tournament-rules.js";
 
-const players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
+const card = (suit,rank) => ({suit,rank});\nconst players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
 const act = (state, seat, action, id = crypto.randomUUID()) =>
   applyMatchAction(state, state.seats[seat].userId, action, id);
 
@@ -286,6 +286,30 @@ function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, co
   assert.equal(state.phase,"round_complete");
   return state;
 }
+
+test("a declared trump sequence containing King and Queen automatically includes Baloot", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing";
+  state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=1;
+  const hand=[card("S","A"),card("S","K"),card("S","Q"),card("S","J"),card("H","7"),card("D","7"),card("C","7"),card("H","8")];
+  state.seats[1].hand=hand;
+  state.projectCandidatesBySeat[1]=detectProjects(hand,state.contract,1);
+  const declared=applyMatchAction(state,"2",{type:"declare_projects"},"auto-baloot-sequence");
+  assert.ok(declared.state.projectsBySeat[1].some(project=>project.type==="baloot"));
+});
+
+test("rule calls are available out of turn but only the host may resolve them", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.hostId="1"; state.currentSeat=0;
+  const opened=applyMatchAction(state,"2",{type:"call_rule",kind:"qayd",targetSeat:0},"rule-call-open");
+  assert.equal(opened.state.pendingRuleCall.status,"pending");
+  assert.throws(()=>applyMatchAction(opened.state,"2",{type:"resolve_rule_call",decision:"upheld"},"rule-nonhost"),/host/);
+  const resolved=applyMatchAction(opened.state,"1",{type:"resolve_rule_call",decision:"upheld",note:"Reviewed the play log"},"rule-host");
+  assert.equal(resolved.state.pendingRuleCall,null);
+  assert.equal(resolved.state.ruleCallHistory.length,1);
+  assert.equal(resolved.state.ruleCallHistory[0].status,"upheld");
+});
 
 test("a player may declare projects on their turn after the first player has played", () => {
   let state=createMatch(players(),()=>0.42);
