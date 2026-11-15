@@ -15,6 +15,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 const token = process.env.BOT_TOKEN;
 const webAppUrl = process.env.WEBAPP_URL || "https://gaming-hub-0agm.onrender.com";
 const bot = token && process.env.BOT_ENABLED !== "false" ? new Telegraf(token) : null;
+const telegramWebhookSecret = token
+  ? crypto.createHmac('sha256', token).update('gaming-hub-telegram-webhook-v1').digest('hex')
+  : null;
+const telegramWebhookPath = telegramWebhookSecret
+  ? `/telegram/webhook/${telegramWebhookSecret.slice(0, 32)}`
+  : null;
+if (bot) {
+  app.use(bot.webhookCallback(telegramWebhookPath, { secretToken: telegramWebhookSecret }));
+}
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 if (!databaseUrl) {
@@ -1061,9 +1070,13 @@ async function start() {
   }
 
   app.listen(port, () => console.log(`Gaming Hub listening on port ${port}`));
-  bot?.launch()
-    .then(() => console.log('Telegram bot started'))
-    .catch((error) => console.error('Telegram bot failed to start:', error));
+  if (bot) {
+    const webhookBase = (process.env.TELEGRAM_WEBHOOK_URL || "https://gaming-hub-0agm.onrender.com").replace(/\\/+$/, "");
+    await bot.telegram.setWebhook(`${webhookBase}${telegramWebhookPath}`, {
+      secret_token: telegramWebhookSecret
+    });
+    console.log('Telegram bot webhook active');
+  }
 }
 
 start().catch((error) => {
