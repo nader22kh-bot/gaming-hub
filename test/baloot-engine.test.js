@@ -290,7 +290,7 @@ test("project declarations are server-verified, one per seat, and scored into th
   assert.equal(declared.event.type,"projects_declared");
   assert.equal(declared.state.currentSeat,1);
   assert.throws(()=>act(declared.state,1,{type:"declare_projects"},"project-declare-again"),/already declared/);
-  assert.equal(publicMatchState(declared.state,"1").myProjectsDeclared,true);
+  assert.equal(publicMatchState(declared.state,"2").myProjectsDeclared,true);
   let finished = declared.state;
   let counter = 0;
   while (finished.phase === "playing" && counter < 32) {
