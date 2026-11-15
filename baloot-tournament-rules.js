@@ -107,8 +107,8 @@ export function applyDoublingAction(state, seat, action) {
   const next = structuredClone(state);
 
   if (kind === "double") {
-    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
     if (next.level !== "normal" || buyerSide) throw new Error("Only the opposing team may double first.");
+    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
     if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
     if (next.contractType === "sun" &&
         !(next.matchPoints[buyerTeam] <= 100 && next.matchPoints[1-buyerTeam] > 100)) {
