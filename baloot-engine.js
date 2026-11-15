@@ -532,8 +532,15 @@ export function applyMatchAction(state, userId, action, actionId) {
     if (action?.type === "declare_projects") {
       if (!projectDeclarationWindow(next)) throw new Error("The project declaration window is closed.");
       if (next.projectsDeclaredBySeat?.[seat]) throw new Error("You have already declared your projects.");
-      const projects = (next.projectCandidatesBySeat?.[seat] || []).filter(project => project.type !== "baloot");
-      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []), ...projects];
+      const candidates = next.projectCandidatesBySeat?.[seat] || [];
+      const projects = candidates.filter(project => project.type !== "baloot");
+      const sequenceShowsBaloot = next.contract.type === "hokom" &&
+        projects.some(project => project.subtype === "sequence" &&
+          project.suit === next.contract.trumpSuit &&
+          project.ranks?.includes("K") && project.ranks?.includes("Q"));
+      const autoBaloot = sequenceShowsBaloot ? candidates.find(project => project.type === "baloot") : null;
+      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []), ...projects,
+        ...(autoBaloot && !(next.projectsBySeat?.[seat] || []).some(project => project.type === "baloot") ? [autoBaloot] : [])];
       next.projectsDeclaredBySeat[seat] = true;
       event = { type: "projects_declared", seat, projects };
     } else if (action?.type !== "play") throw new Error("Declare projects or play one card.");
