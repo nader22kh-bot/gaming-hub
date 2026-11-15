@@ -1,4 +1,4 @@
-import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction } from "./baloot-tournament-rules.js";
+import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction, openRuleCall, resolveRuleCall } from "./baloot-tournament-rules.js";
 // Server-authoritative Saudi Baloot core rules.
 // A hand starts with five cards, an up-card auction, then three more cards.
 // Saudi tournament projects are declared and settled by the authoritative engine.
@@ -211,7 +211,9 @@ export function createMatch(players, random = Math.random, options = {}) {
     projectsDeclaredBySeat: [false, false, false, false],
     projectCandidatesBySeat: [null, null, null, null],
     declarationsClosed: false,
-    projectResult: null
+    projectResult: null,
+    pendingRuleCall: null,
+    ruleCallHistory: []
   };
 }
 
@@ -433,6 +435,30 @@ export function applyMatchAction(state, userId, action, actionId) {
     return { state, duplicate: true, event: null };
   }
 
+  if (action?.type === "call_rule") {
+    if (!["akka","sawa","qayd","takyid","takweesh"].includes(action.kind)) throw new Error("Unsupported table rule call.");
+    const next = openRuleCall(state, seat, action.kind, {
+      id: action.callId || actionId,
+      targetSeat: Number.isInteger(action.targetSeat) ? action.targetSeat : null,
+      evidence: typeof action.evidence === "string" ? action.evidence.slice(0,300) : null
+    });
+    next.ruleCallHistory = [...(state.ruleCallHistory || [])];
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: { type: "rule_call_opened", call: next.pendingRuleCall } };
+  }
+  if (action?.type === "resolve_rule_call") {
+    if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host may record the table ruling.");
+    const next = resolveRuleCall(state, {
+      decision: action.decision,
+      note: action.note,
+      refereeId: String(userId)
+    });
+    next.ruleCallHistory = [...(state.ruleCallHistory || []), structuredClone(next.pendingRuleCall)];
+    next.pendingRuleCall = null;
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: { type: "rule_call_resolved", ruling: next.ruleCallHistory[next.ruleCallHistory.length - 1] } };
+  }
+
   if (action?.type === "next_round") {
     if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
     if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host can start the next deal.");
@@ -598,6 +624,8 @@ export function publicMatchState(state, viewerId) {
     myProjectsDeclared: Boolean(state.projectsDeclaredBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))]),
     balootAnnouncementCard: balootAnnouncementCard(state, state.seats.findIndex(player => player.userId === String(viewerId))),
     projectResult: state.projectResult || null,
+    pendingRuleCall: state.pendingRuleCall || null,
+    ruleCallHistory: state.ruleCallHistory || [],
     seats: state.seats.map(player => ({
       name: player.name,
       seat: player.seat,
