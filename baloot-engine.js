@@ -1,4 +1,4 @@
-import { detectProjects, settleProjects, projectDeclarationWindow } from "./baloot-tournament-rules.js";
+import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction } from "./baloot-tournament-rules.js";
 // Server-authoritative Saudi Baloot core rules.
 // A hand starts with five cards, an up-card auction, then three more cards.
 // Saudi tournament projects are declared and settled by the authoritative engine.
@@ -244,15 +244,26 @@ function completeAuction(state) {
   next.stock = [];
   next.faceUp = null;
   next.buyerSeat = buyerSeat;
+  next.contract = { ...contract, buyerSeat };
   next.bidRound = 0;
   next.bidPasses = 0;
   next.sunOvercallEligible = [];
-  next.phase = "playing";
   next.projectsBySeat = [null, null, null, null];
   next.projectCandidatesBySeat = next.seats.map((player, seat) => detectProjects(player.hand, next.contract, seat));
   next.declarationsClosed = false;
   next.projectResult = null;
-  next.currentSeat = advanceSeat(next.dealer);
+  const sunDoubleAllowed = contract.type === "sun" &&
+    next.matchPoints[buyerSeat % 2] <= 100 && next.matchPoints[1 - (buyerSeat % 2)] > 100;
+  if (contract.type === "hokom" || sunDoubleAllowed) {
+    next.doubling = createDoublingState(next.contract, next.matchPoints);
+    next.phase = "doubling";
+    next.currentSeat = advanceSeat(buyerSeat);
+  } else {
+    next.doubling = null;
+    next.phase = "playing";
+    next.currentSeat = advanceSeat(next.dealer);
+  }
+  next.gahwa = false;
   return next;
 }
 
@@ -412,7 +423,37 @@ export function applyMatchAction(state, userId, action, actionId) {
   const next = structuredClone(state);
   let event;
 
-  if (next.phase === "bidding") {
+  if (next.phase === "doubling") {
+    const buyer = next.buyerSeat;
+    const firstOpponent = advanceSeat(buyer);
+    const secondOpponent = (buyer + 3) % 4;
+    if (action?.type === "pass") {
+      if (seat === firstOpponent) {
+        next.currentSeat = secondOpponent;
+        event = { type: "doubling_passed", seat };
+      } else if (seat === secondOpponent && next.doubling?.level === "normal") {
+        next.doubling.final = true;
+        next.doubling.nextActor = null;
+        next.phase = "playing";
+        next.currentSeat = advanceSeat(next.dealer);
+        event = { type: "doubling_declined" };
+      } else {
+        throw new Error("Only an opposing player may pass on the initial double.");
+      }
+    } else {
+      next.doubling = applyDoublingAction(next.doubling, seat, action);
+      event = { type: "doubling_action", level: next.doubling.level, multiplier: next.doubling.multiplier };
+      if (next.doubling.final) {
+        next.phase = "playing";
+        next.contract = { ...next.contract, locked: Boolean(next.doubling.locked) };
+        next.gahwa = next.doubling.level === "gahwa";
+        next.currentSeat = advanceSeat(next.dealer);
+        event = { type: "doubling_complete", level: next.doubling.level, multiplier: next.doubling.multiplier, gahwa: next.gahwa };
+      } else {
+        next.currentSeat = next.doubling.nextActor;
+      }
+    }
+  } else if (next.phase === "bidding") {
     event = applyBid(next, seat, action);
     if (event.type === "redeal") {
       const redealt = dealNextRound(next);
@@ -454,7 +495,7 @@ export function applyMatchAction(state, userId, action, actionId) {
       if (next.tricks.length === 8) {
         next.declarationsClosed = true;
         const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
-        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer);
+        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, next.doubling?.multiplier || 1);
         result.projectPoints = [...projectResult.awarded];
         result.projectResult = projectResult;
         result.gamePoints = result.gamePoints.map((points, team) => points + projectResult.awarded[team]);
@@ -462,8 +503,9 @@ export function applyMatchAction(state, userId, action, actionId) {
         next.matchPoints = next.matchPoints.map((points, team) => points + result.gamePoints[team]);
         const topScore = Math.max(...next.matchPoints);
         const tiedAtTarget = next.matchPoints[0] === next.matchPoints[1] && topScore >= next.targetScore;
-        next.phase = topScore >= next.targetScore && !tiedAtTarget ? "match_complete" : "round_complete";
-        next.roundResult = { ...result, matchPoints: [...next.matchPoints] };
+        next.phase = next.gahwa || (topScore >= next.targetScore && !tiedAtTarget) ? "match_complete" : "round_complete";
+        if (next.gahwa) next.matchWinnerTeam = result.winningTeam;
+        next.roundResult = { ...result, matchPoints: [...next.matchPoints], gahwa: next.gahwa, matchWinnerTeam: next.matchWinnerTeam ?? null };
         event = { type: "round_complete", result: next.roundResult };
       }
     } else {
@@ -490,6 +532,9 @@ export function publicMatchState(state, viewerId) {
     faceUp: state.faceUp || null,
     contract: state.contract,
     buyerSeat: state.buyerSeat,
+    doubling: state.doubling || null,
+    gahwa: Boolean(state.gahwa),
+    matchWinnerTeam: state.matchWinnerTeam ?? null,
     trick: state.trick,
     tricks: state.tricks,
     teamPoints: state.teamPoints,
