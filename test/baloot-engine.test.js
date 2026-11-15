@@ -252,7 +252,7 @@ test("reconnecting player receives their hand but not opponents' cards", () => {
   assert.equal(view.currentSeat,match.currentSeat);
 });
 
-function finishSunRound(initialPoints = [0,0]) {
+function finishSunRound(initialPoints = [0,0], multiplier = 1) {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
   const hands = dealHands(deck);
@@ -264,6 +264,7 @@ function finishSunRound(initialPoints = [0,0]) {
   state.hostId = "1";
   state.matchPoints = [...initialPoints];
   state.targetScore = 152;
+  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };
   state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
   state.currentSeat = 1;
   let counter = 0;
@@ -360,6 +361,49 @@ test("Hokom double can be declined by both opposing players", () => {
   assert.equal(state.phase,"playing");
   assert.equal(state.doubling.final,true);
   assert.equal(state.doubling.multiplier,1);
+});
+
+test("Double multiplies the hand score and keeps Gahwa escalation separate", () => {
+  const doubled=finishSunRound([0,0],2);
+  assert.equal(doubled.roundResult.multiplier,2);
+  assert.equal(doubled.roundResult.gamePoints.reduce((sum,value)=>sum+value,0),52);
+});
+
+test("a raw-point tie in a doubled hand is lost by the doubler", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"sun",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:null};
+  state.buyerSeat=1; state.currentSeat=0; state.tricks=Array.from({length:7},()=>({plays:[],winnerSeat:0,points:0}));
+  state.teamPoints=[65,75]; state.teamTricks=[4,3];
+  state.doubling={multiplier:2,level:"double",final:true,locked:false,buyerSeat:1,buyerTeam:1,doublerSeat:0};
+  state.seats.forEach((p,seat)=>{p.hand=[[{suit:"H",rank:"7"},{suit:"S",rank:"8"},{suit:"D",rank:"9"},{suit:"C",rank:"7"}][seat]];});
+  const cards=["H:7","S:8","D:9","C:7"];
+  for(let i=0;i<4;i++) state=applyMatchAction(state,state.seats[state.currentSeat].userId,{type:"play",card:cards[state.currentSeat]},"tie-double-"+i).state;
+  assert.deepEqual(state.teamPoints,[75,75]);
+  assert.equal(state.roundResult.winningTeam,1);
+  assert.deepEqual(state.roundResult.gamePoints,[0,52]);
+});
+
+test("closed Hokom prevents trumping while a non-trump card remains", () => {
+  const hand=[{suit:"S",rank:"7"},{suit:"H",rank:"7"}];
+  const trick=[{seat:0,card:{suit:"D",rank:"7"}}];
+  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:true},1),[hand[1]]);
+  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:false},1),[hand[0]]);
+});
+
+test("Baloot must be announced on the second trump King or Queen before it is played", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=1; state.tricks=[{plays:[
+    {seat:1,card:{suit:"S",rank:"K"}},
+    {seat:2,card:{suit:"H",rank:"7"}},
+    {seat:3,card:{suit:"D",rank:"7"}},
+    {seat:0,card:{suit:"C",rank:"7"}}
+  ],winnerSeat:1,points:4}];
+  state.seats[1].hand=[{suit:"S",rank:"Q"},{suit:"H",rank:"8"},{suit:"H",rank:"9"},{suit:"H",rank:"J"},{suit:"D",rank:"8"},{suit:"D",rank:"9"},{suit:"C",rank:"8"}];
+  state.projectCandidatesBySeat[1]=[{type:"baloot",seat:1,value:2,priority:100}];
+  assert.equal(publicMatchState(state,"2").balootAnnouncementCard,"S:Q");
+  state=applyMatchAction(state,"2",{type:"play",card:"S:Q",announceBaloot:true},"announce-baloot-before-play").state;
+  assert.ok(state.projectsBySeat[1].some(project=>project.type==="baloot"));
 });
 
 test("match score accumulates and host can start the next deal with dealer rotation", () => {
