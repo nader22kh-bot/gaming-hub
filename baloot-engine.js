@@ -1,4 +1,4 @@
-import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction, openRuleCall, resolveRuleCall } from "./baloot-tournament-rules.js";
+import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction, openRuleCall, resolveRuleCall, validateAkkaClaim } from "./baloot-tournament-rules.js";
 // Server-authoritative Saudi Baloot core rules.
 // A hand starts with five cards, an up-card auction, then three more cards.
 // Saudi tournament projects are declared and settled by the authoritative engine.
@@ -560,6 +560,11 @@ export function applyMatchAction(state, userId, action, actionId) {
       next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []),
         (next.projectCandidatesBySeat?.[seat] || []).find(project => project.type === "baloot")];
     }
+    if (action.announceAkka) {
+      const remainingCards = next.seats.flatMap(player => player.hand);
+      if (!validateAkkaClaim(card, remainingCards)) throw new Error("Akka is valid only when no higher unplayed card remains in that suit.");
+      next.akkaClaims = [...(next.akkaClaims || []), {seat,card:cardKey(card),trick:next.tricks.length+1}];
+    }
     const legal = legalCards(hand, next.trick, next.contract, seat);
     if (!legal.some(candidate => cardKey(candidate) === cardKey(card))) {
       throw new Error(next.contract.type === "hokom"
@@ -667,6 +672,10 @@ export function publicMatchState(state, viewerId) {
     projectResult: state.projectResult || null,
     pendingRuleCall: state.pendingRuleCall || null,
     ruleCallHistory: state.ruleCallHistory || [],
+    akkaClaims: state.akkaClaims || [],
+    akkaEligibleCards: state.currentSeat === state.seats.findIndex(player => player.userId === String(viewerId))
+      ? state.seats[state.currentSeat].hand.filter(card => validateAkkaClaim(card, state.seats.flatMap(player => player.hand))).map(cardKey)
+      : [],
     seats: state.seats.map(player => ({
       name: player.name,
       seat: player.seat,
