@@ -259,12 +259,18 @@ function bidOrderIndex(state, seat) {
 
 function earlierBidders(state, seat) {
   const index = bidOrderIndex(state, seat);
-  return [0, 1, 2, 3].filter(candidate => bidOrderIndex(state, candidate) < index);
+  const order = [];
+  const first = advanceSeat(state.dealer);
+  for (let offset = 0; offset < index; offset++) order.push((first + offset) % 4);
+  return order;
 }
 
 function laterBidders(state, seat) {
   const index = bidOrderIndex(state, seat);
-  return [0, 1, 2, 3].filter(candidate => bidOrderIndex(state, candidate) > index);
+  const order = [];
+  const first = advanceSeat(state.dealer);
+  for (let offset = index + 1; offset < 4; offset++) order.push((first + offset) % 4);
+  return order;
 }
 
 function applyBid(next, seat, action) {
