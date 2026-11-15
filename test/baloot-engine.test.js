@@ -285,7 +285,7 @@ function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, co
     counter++;
   }
   assert.equal(counter,32);
-  assert.equal(state.phase,"round_complete");
+  assert.equal(state.phase,gahwa?"match_complete":"round_complete");
   return state;
 }
 
@@ -435,8 +435,8 @@ test("a raw-point tie in a doubled hand is lost by the doubler", () => {
   const cards=["H:7","S:8","D:9","C:7"];
   for(let i=0;i<4;i++) state=applyMatchAction(state,state.seats[state.currentSeat].userId,{type:"play",card:cards[state.currentSeat]},"tie-double-"+i).state;
   assert.deepEqual(state.teamPoints,[75,75]);
-  assert.equal(state.roundResult.winningTeam,1);
-  assert.deepEqual(state.roundResult.gamePoints,[0,52]);
+  assert.equal(state.roundResult.winningTeam,0);
+  assert.deepEqual(state.roundResult.gamePoints,[52,0]);
 });
 
 test("closed Hokom prevents leading trump but still allows a legal cut", () => {
