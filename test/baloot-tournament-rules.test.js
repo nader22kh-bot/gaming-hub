@@ -59,9 +59,9 @@ test("equal projects are awarded by seat order from dealer's right", () => {
 
 test("only winning team's projects count, and only double doubles project points", () => {
   const bySeat=[
-    [{type:"sira",seat:0,value:4,priority:150}],
-    [{type:"hundred",seat:1,value:20,priority:400}],
-    [{type:"fifty",seat:2,value:10,priority:200}],
+    [{type:"sira",seat:0,value:4,rawValue:20,priority:150}],
+    [{type:"hundred",seat:1,value:20,rawValue:100,priority:400}],
+    [{type:"fifty",seat:2,value:10,rawValue:50,priority:200}],
     []
   ];
   const doubled=settleProjects(bySeat,{type:"sun"},0,2);
