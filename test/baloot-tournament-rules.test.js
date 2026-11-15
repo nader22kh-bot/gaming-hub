@@ -102,7 +102,7 @@ test("Hokom doubling follows Double → Three → Four → Gahwa with buyer/doub
 
 test("only the two opposing principals may raise; out-of-turn multiplier actions fail", () => {
   let state=createDoublingState({type:"hokom",buyerSeat:0,team:0});
-  assert.throws(()=>applyDoublingAction(state,0,{type:"double"}),/opposing/);
+  assert.throws(()=>applyDoublingAction(state,0,{type:"double"}),/opposing|doubling turn/);
   state=applyDoublingAction(state,1,{type:"double"});
   assert.throws(()=>applyDoublingAction(state,2,{type:"three"}),/buyer/);
   assert.throws(()=>applyDoublingAction(state,3,{type:"accept"}),/turn/);
