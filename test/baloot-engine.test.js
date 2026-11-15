@@ -104,6 +104,9 @@ test("four passes open the second auction round; second-round Hokom uses another
   match = act(match, 2, {type:"pass"}, "second-pass-2").state;
   match = act(match, 3, {type:"pass"}, "second-pass-3").state;
   match = act(match, 0, {type:"pass"}, "second-pass-0").state;
+  assert.equal(match.phase, "doubling");
+  match = act(match, 2, {type:"pass"}, "hokom-double-pass-1").state;
+  match = act(match, 0, {type:"pass"}, "hokom-double-pass-2").state;
   assert.equal(match.phase, "playing");
   assert.equal(match.contract.trumpSuit, otherSuit);
   assert.deepEqual(match.seats.map(player => player.hand.length), [8, 8, 8, 8]);
@@ -291,6 +294,7 @@ test("project declarations are server-verified, one per seat, and scored into th
   assert.equal(declared.state.currentSeat,1);
   assert.throws(()=>act(declared.state,1,{type:"declare_projects"},"project-declare-again"),/already declared/);
   assert.equal(publicMatchState(declared.state,"2").myProjectsDeclared,true);
+  assert.equal(publicMatchState(declared.state,"3").projectDeclarations[1].projects,undefined);
   let finished = declared.state;
   let counter = 0;
   while (finished.phase === "playing" && counter < 32) {
@@ -303,6 +307,40 @@ test("project declarations are server-verified, one per seat, and scored into th
   assert.ok(finished.roundResult.projectPoints);
   assert.deepEqual(finished.matchPoints,finished.roundResult.gamePoints);
   assert.equal(finished.declarationsClosed,true);
+});
+
+test("Hokom doubling escalates Double → Three → Four → Gahwa and closes on buyer", () => {
+  let state=createMatch(players(),()=>0.4);
+  const trump=state.faceUp.suit;
+  state=act(state,1,{type:"hokom",trumpSuit:trump},"double-test-buy").state;
+  for(let i=0;i<3;i++) state=act(state,state.currentSeat,{type:"pass"},"double-test-auction-"+i).state;
+  assert.equal(state.phase,"doubling");
+  assert.equal(state.currentSeat,2);
+  state=act(state,2,{type:"double",locked:true},"double-test-double").state;
+  assert.equal(state.doubling.multiplier,2);
+  assert.equal(state.currentSeat,1);
+  state=act(state,1,{type:"three"},"double-test-three").state;
+  assert.equal(state.doubling.multiplier,3);
+  assert.equal(state.currentSeat,2);
+  state=act(state,2,{type:"four",locked:false},"double-test-four").state;
+  assert.equal(state.doubling.multiplier,4);
+  assert.equal(state.currentSeat,1);
+  state=act(state,1,{type:"gahwa"},"double-test-gahwa").state;
+  assert.equal(state.phase,"playing");
+  assert.equal(state.gahwa,true);
+  assert.equal(state.contract.locked,false);
+  assert.throws(()=>act(state,2,{type:"play",card:cardKey(state.seats[2].hand[0])},"double-wrong-turn"),/not your turn/);
+});
+
+test("Hokom double can be declined by both opposing players", () => {
+  let state=createMatch(players(),()=>0.4);
+  state=act(state,1,{type:"hokom",trumpSuit:state.faceUp.suit},"decline-buy").state;
+  for(let i=0;i<3;i++) state=act(state,state.currentSeat,{type:"pass"},"decline-auction-"+i).state;
+  state=act(state,2,{type:"pass"},"decline-double-1").state;
+  state=act(state,0,{type:"pass"},"decline-double-2").state;
+  assert.equal(state.phase,"playing");
+  assert.equal(state.doubling.final,true);
+  assert.equal(state.doubling.multiplier,1);
 });
 
 test("match score accumulates and host can start the next deal with dealer rotation", () => {
