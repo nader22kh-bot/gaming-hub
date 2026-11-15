@@ -125,8 +125,40 @@
         controls=`<div class="multi-controls"><button class="game-action" data-bid="sun">☀️ ${t("Sun","صن")}</button>${hokomControl}${ashkalAllowed?`<button class="answer" data-bid="ashkal">${t("Ashkal · Sun for partner","أشكل · صن للشريك")}</button>`:""}<button class="answer" data-bid="pass">${t("Pass","بس")}</button></div>`;
       }else controls=`<p class="muted">${t("Waiting for the current bidder…","بانتظار المزايد الحالي…")}</p>`;
       controls+=`<div class="baloot-upcard"><b>${t("Up-card","الورقة المكشوفة")}</b><span>${escape(up)}</span><small>${t("Auction round","جولة الشراء")} ${room.bidRound||1}/2</small></div>`;
+    }else if(room.phase==="doubling"){
+      const d=room.doubling||{};
+      const canRespond=d.nextActor===mySeat?.seat;
+      if(myTurn&&d.level==="normal"){
+        controls=`<p>${t("The opposing team may double the contract","للفريق المقابل حق الدبل")}</p>
+          <div class="multi-controls">
+            <button class="game-action" data-double="double" data-lock="false">${t("Double · Open","دبل مفتوح")}</button>
+            <button class="answer" data-double="double" data-lock="true">${t("Double · Closed","دبل مقفل")}</button>
+            <button class="answer" data-double="pass">${t("Pass","ولا")}</button>
+          </div>`;
+      }else if(myTurn&&canRespond&&d.level==="double"&&mySeat.seat===d.buyerSeat){
+        controls=`<p>${t("Respond to the double","الرد على الدبل")}</p><div class="multi-controls">
+          ${d.contractType==="hokom"?`<button class="game-action" data-double="three">${t("Three ×3","ثري ×3")}</button>`:""}
+          <button class="answer" data-double="accept">${t("Accept","قبول")}</button></div>`;
+      }else if(myTurn&&canRespond&&d.level==="three"&&mySeat.seat===d.doublerSeat){
+        controls=`<p>${t("Respond to Three","الرد على الثري")}</p><div class="multi-controls">
+          <button class="game-action" data-double="four" data-lock="false">${t("Four · Open","فور مفتوح")}</button>
+          <button class="answer" data-double="four" data-lock="true">${t("Four · Closed","فور مقفل")}</button>
+          <button class="answer" data-double="accept">${t("Accept","قبول")}</button></div>`;
+      }else if(myTurn&&canRespond&&d.level==="four"&&mySeat.seat===d.buyerSeat){
+        controls=`<p>${t("Final response","الرد الأخير")}</p><div class="multi-controls">
+          <button class="game-action" data-double="gahwa">${t("Gahwa ☕ · Win the match","قهوة ☕ · حسم الصكة")}</button>
+          <button class="answer" data-double="accept">${t("Accept Four","قبول الفور")}</button></div>`;
+      }else{
+        controls=`<p class="muted">${t("Waiting for the doubling decision…","بانتظار قرار الدبل…")}</p>`;
+      }
     }else if(room.phase==="playing"&&myTurn){
-      controls=`<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong></button>`).join("")}</div>`;
+      const projectButton=room.projectWindowOpen&&!room.myProjectsDeclared
+        ?`<button class="answer" id="multiDeclareProjects">${t("Declare projects","إعلان المشاريع")}</button>`
+        :"";
+      const declarations=(room.projectDeclarations||[]).filter(item=>item.declared).map(item=>
+        `<span class="trick-card">${item.seat+1}: ${(item.projects||[]).map(p=>t(p.type,p.type)).join(", ")||t("No projects","لا توجد مشاريع")}</span>`
+      ).join("");
+      controls=`${projectButton}${declarations?`<div class="multi-trick">${declarations}</div>`:""}<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}" data-announce-baloot="${room.balootAnnouncementCard===cardKey(c)?"true":"false"}" data-announce-akka="${(room.akkaEligibleCards||[]).includes(cardKey(c))?"true":"false"}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong>${room.balootAnnouncementCard===cardKey(c)?`<small>${t("BALOOT!","بلوت!")}</small>`:""}${(room.akkaEligibleCards||[]).includes(cardKey(c))?`<small>${t("AKKA","إكة")}</small>`:""}</button>`).join("")}</div>`;
     }else if(room.phase==="round_complete"){
       const result=room.roundResult||{};
       const host=room.hostSeat===mySeat?.seat;
@@ -134,10 +166,11 @@
         ${result.made?t("Contract made","نجح الشراء"):t("Contract fell · defenders take the hand","سقط الشراء · الخصم يأخذ اليد")}<br>
         ${t("Card points","أبناط الورق")}: ${(result.teamPoints||[0,0]).join(" — ")}<br>
         ${t("Game points added","القيد المضاف")}: ${(result.gamePoints||[0,0]).join(" — ")}<br>
+        ${t("Project points","نقاط المشاريع")}: ${(result.projectPoints||[0,0]).join(" — ")}<br>
         ${t("Match score","نتيجة الصكة")}: ${(result.matchPoints||room.matchPoints||[0,0]).join(" — ")}
       </div>${host?`<button class="game-action" id="multiNext">${t("Deal next hand","وزّع اليد التالية")}</button>`:`<p class="muted">${t("Waiting for the host to deal again…","بانتظار صاحب الطاولة لبدء اليد التالية…")}</p>`}`;
     }else if(room.phase==="match_complete"){
-      const winner=(room.matchPoints||[0,0]).indexOf(Math.max(...(room.matchPoints||[0,0])));
+      const winner=Number.isInteger(room.matchWinnerTeam)?room.matchWinnerTeam:(room.matchPoints||[0,0]).indexOf(Math.max(...(room.matchPoints||[0,0])));
       controls=`<div class="baloot-reward">🏆 ${t("Match complete","انتهت الصكة")}<br>
         ${t("Winning team","الفريق الفائز")} ${winner===0?"A":"B"}<br>
         ${t("Final score","النتيجة النهائية")}: ${matchScore}
@@ -145,6 +178,31 @@
     }else{
       controls=`<p class="muted">${myTurn?t("Your turn","دورك الآن"):t("Waiting for turn","بانتظار دورك")}</p>`;
     }
+    const isHost=room.hostSeat===mySeat?.seat;
+    const ruleCall=room.pendingRuleCall;
+    const liveDoublePanel=room.phase==="playing"&&room.canDouble
+      ? `<div class="multi-controls"><button class="answer" id="multiLiveDouble">${t("Double now","دبل الآن")}</button>
+          <button class="answer" id="multiLiveDoubleClosed">${t("Double · Closed","دبل مقفل")}</button></div>`
+      : "";
+    const rulePanel=room.phase==="playing" ? (ruleCall
+      ? `<div class="baloot-reward"><b>${t("Table ruling requested","تم طلب حكم الطاولة")}: ${escape(ruleCall.kind)}</b>
+          <p>${t("Called by seat","طلبه اللاعب")} ${ruleCall.callerSeat+1} · ${ruleCall.targetSeat===null?"":t("Target seat","اللاعب المعني")+" "+(ruleCall.targetSeat+1)}</p>
+          ${isHost?`<div class="multi-controls">
+            <button class="game-action" data-rule-decision="upheld">${t("Uphold","تأييد")}</button>
+            <button class="answer" data-rule-decision="rejected">${t("Reject","رفض")}</button>
+            <button class="answer" data-rule-decision="warning">${t("Warning","إنذار")}</button>
+            <button class="answer" data-rule-decision="redeal">${t("Record redeal ruling","تسجيل حكم إعادة التوزيع")}</button>
+          </div>`:`<p class="muted">${t("Waiting for the table host to record the ruling","بانتظار صاحب الطاولة لتسجيل الحكم")}</p>`}
+        </div>`
+      : `<div class="multi-controls"><select id="multiRuleKind">
+          <option value="qayd">${t("Qayd / اعتراض","قيد / اعتراض")}</option>
+          <option value="sawa">${t("Sawa","سوا")}</option>
+          <option value="akka">${t("Akka","إكة")}</option>
+          <option value="takyid">${t("Takyid","تقييد")}</option>
+          <option value="takweesh">${t("Takweesh","تكويش")}</option>
+        </select><select id="multiRuleTarget"><option value="">${t("No target","بدون لاعب محدد")}</option>${room.seats.map(p=>`<option value="${p.seat}">${p.seat+1}. ${escape(p.name)}</option>`).join("")}</select>
+        <button class="answer" id="multiCallRule">${t("Request table ruling","طلب حكم")}</button></div>`
+    ) : "";
     const auction=(room.bidHistory||[]).slice(-6).map(item=>{
       const label=item.bid==="pass"?t("Pass","بس"):item.bid==="sun"?t("Sun","صن"):item.bid==="ashkal"?t("Ashkal","أشكل"):t("Hokom","حكم");
       return `<span class="trick-card">${item.seat+1}: ${label}</span>`;
@@ -156,14 +214,30 @@
       <div class="multi-trick">${trick}</div>
       ${auction?`<div class="multi-trick">${auction}</div>`:""}
       <p class="muted">${myTurn?t("Your turn","دورك الآن"):t("Waiting for turn","بانتظار دورك")} · ${escape(room.phase)}</p>
-      ${controls}<p class="muted" id="multiError"></p>
+      ${controls}${liveDoublePanel}${rulePanel}<p class="muted" id="multiError"></p>
     </div>`);
     document.querySelectorAll("[data-bid]").forEach(button=>button.onclick=()=>{
       const action={type:button.dataset.bid};
       if(action.type==="hokom")action.trumpSuit=room.bidRound===1?room.faceUp.suit:$("multiTrump").value;
       send(action);
     });
-    document.querySelectorAll("[data-card]").forEach(button=>button.onclick=()=>send({type:"play",card:button.dataset.card}));
+    $("multiLiveDouble")?.addEventListener("click",()=>send({type:"call_live_double",locked:false}));
+    $("multiLiveDoubleClosed")?.addEventListener("click",()=>send({type:"call_live_double",locked:true}));
+    $("multiCallRule")?.addEventListener("click",()=>{
+      const target=$("multiRuleTarget").value;
+      send({type:"call_rule",kind:$("multiRuleKind").value,targetSeat:target===""?null:Number(target)});
+    });
+    document.querySelectorAll("[data-rule-decision]").forEach(button=>button.onclick=()=>{
+      const note=window.prompt(t("Optional ruling note","ملاحظة الحكم (اختياري)"))||"";
+      send({type:"resolve_rule_call",decision:button.dataset.ruleDecision,note});
+    });
+    document.querySelectorAll("[data-double]").forEach(button=>button.onclick=()=>{
+      const action={type:button.dataset.double};
+      if(button.dataset.lock!==undefined)action.locked=button.dataset.lock==="true";
+      send(action);
+    });
+    $("multiDeclareProjects")?.addEventListener("click",()=>send({type:"declare_projects"}));
+    document.querySelectorAll("[data-card]").forEach(button=>button.onclick=()=>send({type:"play",card:button.dataset.card,announceBaloot:button.dataset.announceBaloot==="true",announceAkka:button.dataset.announceAkka==="true"}));
     if($("multiNext"))$("multiNext").onclick=()=>send({type:"next_round"});
     if($("multiBack"))$("multiBack").onclick=showMenu;
   }

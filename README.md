@@ -24,16 +24,17 @@ The multiplayer Baloot implementation uses the existing Express + PostgreSQL Ren
 - Follow-suit enforcement, Hokom cutting against a currently winning opponent, overtrumping when required, and overtrumping a trump lead.
 - Eight-trick hands, last-trick bonus, contract success/failure, game-point conversion, Kaboot scoring and match progression to 152.
 
-### Not yet implemented
+### Saudi tournament-rule integration (in progress)
 
-This is the multiplayer core ruleset, not yet a complete tournament-variant engine. Projects (Sira/Fifty/Hundred/four-of-a-kind/Baloot), Double/Three/Four/Gahwa, Sawa and Qayd are not implemented. Local house rules can differ; these options need a single agreed tournament profile before being enabled. The simplified 20-stage Baloot Challenge remains a separate solo progression mode.
+The live server engine now connects the following rules to multiplayer room actions:
 
+- Project detection from the original eight-card hands, declaration before a player's first card, and reveal after the first trick.
+- Saudi project priority and raw-point values, project points added before deciding whether the buyer made the contract, transfer of projects when the buyer fails, and fixed two-point Baloot.
+- Baloot announcement before the second trump King/Queen is played, with automatic Baloot when it is exposed inside a declared trump sequence; Baloot is suppressed with a declared hundred of Kings or Queens.
+- Double → Three → Four → Gahwa decisions, open/closed Hokom, eligible Sun Double, live Hokom/Sun double interruptions, doubled scoring, and the doubled-tie rule.
+- Server-validated Akka declarations and host-recorded Qayd/Sawa/takyid/takweesh table rulings with an audit history.
 
-### Saudi tournament-rule implementation work (in progress)
-
-The accepted rules reference is the General Baloot Regulations published with the Saudi Entertainment Authority / Saudi Mind Sports Federation branding: https://enjoy.sa/media/j1ofreng/baloot.pdf. The new `baloot-tournament-rules.js` module currently provides pure, server-side helpers for project detection/priority/settlement, the Double → Three → Four → Gahwa decision sequence, Akka validation, and pending Qayd/Sawa/Akka/takyid/takweesh rulings. Unit tests are in `test/baloot-tournament-rules.test.js`.
-
-**Important:** this work is not yet wired into the live room action flow or UI. The Qayd/Sawa/takyid/takweesh rules in the published regulation rely on a table judge and the document does not define a fully automatic adjudication algorithm; claims are therefore recorded as pending and cannot award points or force a redeal from client input. The branch must pass the full test/build checks and the remaining room integration work before it is merged or deployed.
+The published Saudi regulation leaves some infraction outcomes to the table judge. The app records those claims and the host's ruling; it does not invent penalties. A recorded redeal ruling is currently an audit entry, not an automatic reset. Full live verification with four separate Telegram accounts, reconnects, and production database persistence is still required before merge/deployment. The simplified 20-stage Baloot Challenge remains a separate solo progression mode.
 
 ## Existing systems preserved
 

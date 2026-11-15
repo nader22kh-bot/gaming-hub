@@ -33,13 +33,13 @@ test("detects Sira, Fifty and Hundred sequences with Saudi Sun/Hokom values", ()
 
 test("detects four Aces as 400 in Sun, but not as a 400 project in Hokom", () => {
   const hand = padded(["S","H","D","C"].map(s=>card(s,"A")));
-  assert.ok(detectProjects(hand,{type:"sun"},0).some(p=>p.type==="fourHundred"&&p.value===40));
+  assert.ok(detectProjects(hand,{type:"sun"},0).some(p=>p.type==="fourHundred"&&p.value===40&&p.rawValue===200));
   assert.ok(!detectProjects(hand,{type:"hokom",trumpSuit:"S"},0).some(p=>p.type==="fourHundred"));
 });
 
 test("detects Hokom Baloot only with trump King and Queen", () => {
   const hand = padded([card("S","K"),card("S","Q")]);
-  assert.ok(detectProjects(hand,{type:"hokom",trumpSuit:"S"},0).some(p=>p.type==="baloot"&&p.value===2));
+  assert.ok(detectProjects(hand,{type:"hokom",trumpSuit:"S"},0).some(p=>p.type==="baloot"&&p.value===2&&p.rawValue===20));
   assert.ok(!detectProjects(hand,{type:"sun"},0).some(p=>p.type==="baloot"));
 });
 
@@ -52,23 +52,34 @@ test("Hundred sequence outranks same-value four-of-a-kind and four Aces is top S
 });
 
 test("equal projects are awarded by seat order from dealer's right", () => {
-  const first={type:"sira",priority:150,value:4,seat:1};
-  const second={type:"sira",priority:150,value:4,seat:3};
+  const first={type:"sira",priority:150,value:4,rawValue:20,seat:1};
+  const second={type:"sira",priority:150,value:4,rawValue:20,seat:3};
   assert.ok(compareProjects(first,second,0)<0);
 });
 
 test("only winning team's projects count, and only double doubles project points", () => {
   const bySeat=[
-    [{type:"sira",seat:0,value:4,priority:150}],
-    [{type:"hundred",seat:1,value:20,priority:400}],
-    [{type:"fifty",seat:2,value:10,priority:200}],
+    [{type:"sira",seat:0,value:4,rawValue:20,priority:150}],
+    [{type:"hundred",seat:1,value:20,rawValue:100,priority:400}],
+    [{type:"fifty",seat:2,value:10,rawValue:50,priority:200}],
     []
   ];
   const doubled=settleProjects(bySeat,{type:"sun"},0,2);
   assert.equal(doubled.winningTeam,1);
   assert.deepEqual(doubled.awarded,[0,40]);
+  assert.deepEqual(doubled.rawAwarded,[0,100]);
   const tripled=settleProjects(bySeat,{type:"sun"},0,3);
   assert.deepEqual(tripled.awarded,[0,20]);
+});
+
+test("Baloot is independent of project priority and never doubles", () => {
+  const bySeat=[
+    [{type:"hundred",seat:0,value:20,rawValue:100,priority:400},{type:"baloot",seat:0,value:2,rawValue:20,priority:100}],
+    [],[],[]
+  ];
+  const doubled=settleProjects(bySeat,{type:"hokom"},0,2);
+  assert.deepEqual(doubled.awarded,[42,0]);
+  assert.deepEqual(doubled.rawAwarded,[120,0]);
 });
 
 test("Hokom doubling follows Double → Three → Four → Gahwa with buyer/doubler turns", () => {

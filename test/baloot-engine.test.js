@@ -5,7 +5,9 @@ import {
   contractTargetPoints, scoreRound, createMatch, applyMatchAction,
   publicMatchState, cardKey, startNextRound
 } from "../baloot-engine.js";
+import { detectProjects } from "../baloot-tournament-rules.js";
 
+const card = (suit,rank) => ({suit,rank});
 const players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
 const act = (state, seat, action, id = crypto.randomUUID()) =>
   applyMatchAction(state, state.seats[seat].userId, action, id);
@@ -104,6 +106,9 @@ test("four passes open the second auction round; second-round Hokom uses another
   match = act(match, 2, {type:"pass"}, "second-pass-2").state;
   match = act(match, 3, {type:"pass"}, "second-pass-3").state;
   match = act(match, 0, {type:"pass"}, "second-pass-0").state;
+  assert.equal(match.phase, "doubling");
+  match = act(match, 2, {type:"pass"}, "hokom-double-pass-1").state;
+  match = act(match, 0, {type:"pass"}, "hokom-double-pass-2").state;
   assert.equal(match.phase, "playing");
   assert.equal(match.contract.trumpSuit, otherSuit);
   assert.deepEqual(match.seats.map(player => player.hand.length), [8, 8, 8, 8]);
@@ -210,6 +215,14 @@ test("duplicate action ids do not apply twice", () => {
   assert.equal(second.state.bidHistory.length,1);
 });
 
+test("projects count as raw points before deciding whether the buyer made the contract", () => {
+  const result=scoreRound([74,56],{type:"sun",team:0},[4,4],[0,20]);
+  assert.equal(result.contractScore,74);
+  assert.equal(result.defendingScore,76);
+  assert.equal(result.made,false);
+  assert.equal(result.winningTeam,1);
+});
+
 test("Sun and Hokom use the Saudi card-point rounding and tie-break rules", () => {
   assert.equal(contractTargetPoints("sun"),65);
   assert.equal(contractTargetPoints("hokom"),81);
@@ -248,18 +261,20 @@ test("reconnecting player receives their hand but not opponents' cards", () => {
   assert.equal(view.currentSeat,match.currentSeat);
 });
 
-function finishSunRound(initialPoints = [0,0]) {
+function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, contractType = "sun") {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
   const hands = dealHands(deck);
   state.phase = "playing";
   state.faceUp = null;
   state.stock = [];
-  state.contract = {type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.contract = {type:contractType,bidderSeat:1,team:1,trumpSuit:contractType==="hokom"?"S":null,ashkal:false};
   state.buyerSeat = 1;
   state.hostId = "1";
   state.matchPoints = [...initialPoints];
   state.targetScore = 152;
+  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":gahwa?"gahwa":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };
+  state.gahwa=gahwa;
   state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
   state.currentSeat = 1;
   let counter = 0;
@@ -270,9 +285,248 @@ function finishSunRound(initialPoints = [0,0]) {
     counter++;
   }
   assert.equal(counter,32);
-  assert.equal(state.phase,"round_complete");
+  assert.equal(state.phase,gahwa?"match_complete":"round_complete");
   return state;
 }
+
+test("a complete four-seat Sun hand stays authoritative across all player sessions", () => {
+  let state=createMatch(players(),()=>0.4,{hostId:"1"});
+  state=applyMatchAction(state,"2",{type:"sun"},"four-seat-sun-buy").state;
+  assert.equal(state.phase,"playing");
+  assert.deepEqual(state.seats.map(player=>player.hand.length),[8,8,8,8]);
+  let moves=0;
+  while(state.phase==="playing"&&moves<32){
+    const seat=state.currentSeat;
+    const userId=state.seats[seat].userId;
+    const view=publicMatchState(state,userId);
+    assert.equal(view.seats[seat].hand.length,state.seats[seat].hand.length);
+    for(let other=0;other<4;other++)if(other!==seat)assert.equal(view.seats[other].hand,undefined);
+    if(view.projectWindowOpen&&!view.myProjectsDeclared){
+      state=applyMatchAction(state,userId,{type:"declare_projects"},"four-seat-project-"+seat).state;
+    }
+    const current=state.seats[seat];
+    const legal=legalCards(current.hand,state.trick,state.contract,seat);
+    state=applyMatchAction(state,userId,{type:"play",card:cardKey(legal[0])},"four-seat-play-"+moves).state;
+    moves++;
+  }
+  assert.equal(moves,32);
+  assert.equal(state.phase,"round_complete");
+  assert.ok(state.roundResult);
+  assert.ok(state.seats.every(player=>player.hand.length===0));
+});
+
+test("Sun double opens only when the buyer is at 100 or less and opponents exceed 100", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.matchPoints=[110,90];
+  state=applyMatchAction(state,"2",{type:"sun"},"sun-eligible-double").state;
+  assert.equal(state.phase,"doubling");
+  assert.equal(state.currentSeat,2);
+  const doubled=applyMatchAction(state,"3",{type:"double",locked:false},"sun-double-action");
+  assert.equal(doubled.state.doubling.multiplier,2);
+  let blocked=createMatch(players(),()=>0.4);
+  blocked.matchPoints=[110,101];
+  blocked=applyMatchAction(blocked,"2",{type:"sun"},"sun-ineligible-double").state;
+  assert.equal(blocked.phase,"playing");
+});
+
+test("a declared hundred of Kings or Queens suppresses Baloot", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.currentSeat=1;
+  const hand=[card("S","K"),card("H","K"),card("D","K"),card("C","K"),card("S","Q"),card("S","A"),card("S","J"),card("H","7")];
+  state.seats[1].hand=hand;
+  state.projectCandidatesBySeat[1]=detectProjects(hand,state.contract,1);
+  const declared=applyMatchAction(state,"2",{type:"declare_projects"},"hundred-kings");
+  assert.ok(!declared.state.projectsBySeat[1].some(project=>project.type==="baloot"));
+  assert.equal(publicMatchState(declared.state,"2").balootAnnouncementCard,null);
+});
+
+test("a declared trump sequence containing King and Queen automatically includes Baloot", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing";
+  state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=1;
+  const hand=[card("S","A"),card("S","K"),card("S","Q"),card("S","J"),card("H","7"),card("D","7"),card("C","7"),card("H","8")];
+  state.seats[1].hand=hand;
+  state.projectCandidatesBySeat[1]=detectProjects(hand,state.contract,1);
+  const declared=applyMatchAction(state,"2",{type:"declare_projects"},"auto-baloot-sequence");
+  assert.ok(declared.state.projectsBySeat[1].some(project=>project.type==="baloot"));
+});
+
+test("rule calls are available out of turn but only the host may resolve them", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.hostId="1"; state.currentSeat=0;
+  const opened=applyMatchAction(state,"2",{type:"call_rule",kind:"qayd",targetSeat:0},"rule-call-open");
+  assert.equal(opened.state.pendingRuleCall.status,"pending");
+  assert.throws(()=>applyMatchAction(opened.state,"2",{type:"resolve_rule_call",decision:"upheld"},"rule-nonhost"),/host/);
+  const resolved=applyMatchAction(opened.state,"1",{type:"resolve_rule_call",decision:"upheld",note:"Reviewed the play log"},"rule-host");
+  assert.equal(resolved.state.pendingRuleCall,null);
+  assert.equal(resolved.state.ruleCallHistory.length,1);
+  assert.equal(resolved.state.ruleCallHistory[0].status,"upheld");
+});
+
+test("a player may declare projects on their turn after the first player has played", () => {
+  let state=createMatch(players(),()=>0.42);
+  const deck=makeDeck(()=>0.22);
+  const hands=dealHands(deck);
+  state.phase="playing";
+  state.faceUp=null; state.stock=[];
+  state.contract={type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.buyerSeat=1;
+  state.seats.forEach((player,seat)=>{player.hand=hands[seat];});
+  state.projectCandidatesBySeat=state.seats.map((player,seat)=>detectProjects(player.hand,state.contract,seat));
+  const first=legalCards(state.seats[1].hand,[],state.contract,1)[0];
+  state=applyMatchAction(state,"2",{type:"play",card:cardKey(first)},"project-first-card").state;
+  const declared=applyMatchAction(state,"3",{type:"declare_projects"},"project-second-seat-declare");
+  assert.equal(declared.event.type,"projects_declared");
+  assert.equal(declared.state.projectsDeclaredBySeat[2],true);
+  assert.equal(declared.state.seats[2].hand.length,8);
+});
+
+test("project declarations are server-verified, one per seat, and scored into the match", () => {
+  let state = createMatch(players(), () => 0.42);
+  const deck = makeDeck(() => 0.22);
+  const hands = dealHands(deck);
+  state.phase = "playing";
+  state.faceUp = null;
+  state.stock = [];
+  state.contract = {type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.buyerSeat = 1;
+  state.hostId = "1";
+  state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
+  state.currentSeat = 1;
+  const declared = act(state,1,{type:"declare_projects"},"project-declare");
+  assert.equal(declared.event.type,"projects_declared");
+  assert.equal(declared.state.currentSeat,1);
+  assert.throws(()=>act(declared.state,1,{type:"declare_projects"},"project-declare-again"),/already declared/);
+  assert.equal(publicMatchState(declared.state,"2").myProjectsDeclared,true);
+  assert.equal(publicMatchState(declared.state,"3").projectDeclarations[1].projects,undefined);
+  let finished = declared.state;
+  let counter = 0;
+  while (finished.phase === "playing" && counter < 32) {
+    const seat = finished.currentSeat;
+    const card = legalCards(finished.seats[seat].hand,finished.trick,finished.contract,seat)[0];
+    finished = applyMatchAction(finished,finished.seats[seat].userId,{type:"play",card:cardKey(card)},"project-round-"+counter).state;
+    counter++;
+  }
+  assert.equal(finished.phase,"round_complete");
+  assert.ok(finished.roundResult.projectPoints);
+  assert.deepEqual(finished.matchPoints,finished.roundResult.gamePoints);
+  assert.equal(finished.declarationsClosed,true);
+});
+
+test("Hokom doubling escalates Double → Three → Four → Gahwa and closes on buyer", () => {
+  let state=createMatch(players(),()=>0.4);
+  const trump=state.faceUp.suit;
+  state=act(state,1,{type:"hokom",trumpSuit:trump},"double-test-buy").state;
+  for(let i=0;i<3;i++) state=act(state,state.currentSeat,{type:"pass"},"double-test-auction-"+i).state;
+  assert.equal(state.phase,"doubling");
+  assert.equal(state.currentSeat,2);
+  state=act(state,2,{type:"double",locked:true},"double-test-double").state;
+  assert.equal(state.doubling.multiplier,2);
+  assert.equal(state.currentSeat,1);
+  state=act(state,1,{type:"three"},"double-test-three").state;
+  assert.equal(state.doubling.multiplier,3);
+  assert.equal(state.currentSeat,2);
+  state=act(state,2,{type:"four",locked:false},"double-test-four").state;
+  assert.equal(state.doubling.multiplier,4);
+  assert.equal(state.currentSeat,1);
+  state=act(state,1,{type:"gahwa"},"double-test-gahwa").state;
+  assert.equal(state.phase,"playing");
+  assert.equal(state.gahwa,true);
+  assert.equal(state.contract.locked,false);
+  assert.throws(()=>act(state,2,{type:"play",card:cardKey(state.seats[2].hand[0])},"double-wrong-turn"),/not your turn/);
+});
+
+test("Hokom double can be declined by both opposing players", () => {
+  let state=createMatch(players(),()=>0.4);
+  state=act(state,1,{type:"hokom",trumpSuit:state.faceUp.suit},"decline-buy").state;
+  for(let i=0;i<3;i++) state=act(state,state.currentSeat,{type:"pass"},"decline-auction-"+i).state;
+  state=act(state,2,{type:"pass"},"decline-double-1").state;
+  state=act(state,0,{type:"pass"},"decline-double-2").state;
+  assert.equal(state.phase,"playing");
+  assert.equal(state.doubling.final,true);
+  assert.equal(state.doubling.multiplier,1);
+});
+
+test("live Hokom double can interrupt play and resumes the exact pending turn", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing";
+  state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=2; state.hostId="1";
+  const called=applyMatchAction(state,"3",{type:"call_live_double",locked:true},"live-double").state;
+  assert.equal(called.phase,"doubling");
+  assert.equal(called.doubling.doublerSeat,2);
+  assert.equal(called.currentSeat,1);
+  const accepted=applyMatchAction(called,"2",{type:"accept"},"live-double-accept").state;
+  assert.equal(accepted.phase,"playing");
+  assert.equal(accepted.currentSeat,2);
+  assert.equal(accepted.contract.locked,true);
+});
+
+test("Gahwa awards the match to the hand winner even below 152", () => {
+  const finished=finishSunRound([0,0],4,true,"hokom");
+  assert.equal(finished.phase,"match_complete");
+  assert.equal(finished.roundResult.gahwa,true);
+  assert.equal(finished.matchWinnerTeam,finished.roundResult.winningTeam);
+});
+
+test("Double multiplies the hand score and keeps Gahwa escalation separate", () => {
+  const doubled=finishSunRound([0,0],2);
+  assert.equal(doubled.roundResult.multiplier,2);
+  assert.equal(doubled.roundResult.gamePoints.reduce((sum,value)=>sum+value,0),52);
+});
+
+test("a raw-point tie in a doubled hand is lost by the doubler", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"sun",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:null};
+  state.buyerSeat=1; state.currentSeat=0; state.tricks=Array.from({length:7},()=>({plays:[],winnerSeat:0,points:0}));
+  state.teamPoints=[65,75]; state.teamTricks=[4,3];
+  state.doubling={multiplier:2,level:"double",final:true,locked:false,buyerSeat:1,buyerTeam:1,doublerSeat:0};
+  state.seats.forEach((p,seat)=>{p.hand=[[{suit:"H",rank:"7"},{suit:"S",rank:"8"},{suit:"D",rank:"9"},{suit:"C",rank:"7"}][seat]];});
+  const cards=["H:7","S:8","D:9","C:7"];
+  for(let i=0;i<4;i++) state=applyMatchAction(state,state.seats[state.currentSeat].userId,{type:"play",card:cards[state.currentSeat]},"tie-double-"+i).state;
+  assert.deepEqual(state.teamPoints,[75,75]);
+  assert.equal(state.roundResult.winningTeam,0);
+  assert.deepEqual(state.roundResult.gamePoints,[52,0]);
+});
+
+test("closed Hokom prevents leading trump but still allows a legal cut", () => {
+  const hand=[{suit:"S",rank:"7"},{suit:"H",rank:"7"}];
+  assert.deepEqual(legalCards(hand,[],{type:"hokom",trumpSuit:"S",locked:true},1),[hand[1]]);
+  const trick=[{seat:0,card:{suit:"D",rank:"7"}}];
+  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:true},1),[hand[0]]);
+});
+
+test("Akka is announced only when the played card is the highest remaining in its suit", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"sun",bidderSeat:0,buyerSeat:0,team:0,trumpSuit:null};
+  state.currentSeat=0;
+  state.seats.forEach(player=>{player.hand=[];});
+  state.seats[0].hand=[{suit:"H",rank:"K"}];
+  state.seats[1].hand=[{suit:"H",rank:"A"}];
+  assert.throws(()=>applyMatchAction(state,"1",{type:"play",card:"H:K",announceAkka:true},"akka-invalid"),/higher unplayed/);
+  state.seats[1].hand=[];
+  assert.deepEqual(publicMatchState(state,"1").akkaEligibleCards,["H:K"]);
+  const played=applyMatchAction(state,"1",{type:"play",card:"H:K",announceAkka:true},"akka-valid");
+  assert.equal(played.state.akkaClaims[0].card,"H:K");
+});
+
+test("Baloot must be announced on the second trump King or Queen before it is played", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=1; state.tricks=[{plays:[
+    {seat:1,card:{suit:"S",rank:"K"}},
+    {seat:2,card:{suit:"H",rank:"7"}},
+    {seat:3,card:{suit:"D",rank:"7"}},
+    {seat:0,card:{suit:"C",rank:"7"}}
+  ],winnerSeat:1,points:4}];
+  state.seats[1].hand=[{suit:"S",rank:"Q"},{suit:"H",rank:"8"},{suit:"H",rank:"9"},{suit:"H",rank:"J"},{suit:"D",rank:"8"},{suit:"D",rank:"9"},{suit:"C",rank:"8"}];
+  state.projectCandidatesBySeat[1]=[{type:"baloot",seat:1,value:2,priority:100}];
+  assert.equal(publicMatchState(state,"2").balootAnnouncementCard,"S:Q");
+  state=applyMatchAction(state,"2",{type:"play",card:"S:Q",announceBaloot:true},"announce-baloot-before-play").state;
+  assert.ok(state.projectsBySeat[1].some(project=>project.type==="baloot"));
+});
 
 test("match score accumulates and host can start the next deal with dealer rotation", () => {
   const completed = finishSunRound();

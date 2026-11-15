@@ -21,12 +21,12 @@ export function detectProjects(hand, contract, seat = 0) {
     let run = [];
     for (const index of indexes) {
       if (run.length && index !== run[run.length - 1] + 1) {
-        addSequenceProject(projects, run.length, suit, seat, contract.type);
+        addSequenceProject(projects, run, suit, seat, contract.type);
         run = [];
       }
       run.push(index);
     }
-    addSequenceProject(projects, run.length, suit, seat, contract.type);
+    addSequenceProject(projects, run, suit, seat, contract.type);
   }
 
   const counts = new Map();
@@ -34,10 +34,10 @@ export function detectProjects(hand, contract, seat = 0) {
   for (const rank of KIND_ORDER) {
     if (counts.get(rank) === 4) {
       if (rank === "A" && contract.type === "sun") {
-        projects.push({ type: "fourHundred", value: 40, rank, seat, priority: 500 });
+        projects.push({ type: "fourHundred", value: 40, rawValue: 200, rank, seat, priority: 500 });
       } else {
-        projects.push({ type: "hundred", subtype: "kind", value: 10, rank, seat,
-          priority: 300 + KIND_ORDER.indexOf(rank) });
+        projects.push({ type: "hundred", subtype: "kind", value: 10, rawValue: 100, rank,
+          priority: 300 + (KIND_ORDER.length - 1 - KIND_ORDER.indexOf(rank)) });
       }
     }
   }
@@ -45,17 +45,19 @@ export function detectProjects(hand, contract, seat = 0) {
   if (contract.type === "hokom") {
     const trump = hand.filter(card => card.suit === contract.trumpSuit);
     if (trump.some(card => card.rank === "K") && trump.some(card => card.rank === "Q")) {
-      projects.push({ type: "baloot", value: 2, seat, priority: 100 });
+      projects.push({ type: "baloot", value: 2, rawValue: 20, seat, priority: 100 });
     }
   }
   return projects.sort((a,b)=>b.priority-a.priority);
 }
 
-function addSequenceProject(out, length, suit, seat, contractType) {
+function addSequenceProject(out, indexes, suit, seat, contractType) {
+  const length = indexes.length;
   if (length < 3) return;
   const type = length >= 5 ? "hundred" : length === 4 ? "fifty" : "sira";
-  out.push({ type, subtype: "sequence", length, suit, seat,
+  out.push({ type, subtype: "sequence", length, ranks: indexes.map(index => SEQUENCE[index]), suit, seat,
     value: PROJECT_POINTS[contractType][type],
+    rawValue: type === "sira" ? 20 : type === "fifty" ? 50 : 100,
     priority: type === "hundred" ? 400 : type === "fifty" ? 200 : 150 });
 }
 
@@ -69,16 +71,26 @@ export function compareProjects(a, b, dealer) {
 
 export function settleProjects(projectsBySeat, contract, dealer, multiplier = 1) {
   const all = projectsBySeat.flat().filter(Boolean);
-  if (!all.length) return { winningTeam: null, awarded: [0,0], winningProject: null };
-  const ordered = [...all].sort((a,b)=>compareProjects(a,b,dealer));
-  const winner = ordered[0];
-  const winningTeam = teamOf(winner.seat);
-  const raw = all.filter(project => teamOf(project.seat) === winningTeam)
-    .reduce((sum, project) => sum + project.value, 0);
-  // Official regulations double projects only for a double; not for three/four.
+  const ordinary = all.filter(project => project.type !== "baloot");
+  const baloots = all.filter(project => project.type === "baloot");
+  const ordered = [...ordinary].sort((a,b)=>compareProjects(a,b,dealer));
+  const winner = ordered[0] || null;
+  const winningTeam = winner ? teamOf(winner.seat) : null;
   const awarded = [0,0];
-  awarded[winningTeam] = raw * (multiplier === 2 ? 2 : 1);
-  return { winningTeam, awarded, winningProject: winner, projects: all };
+  const rawAwarded = [0,0];
+  if (winner) {
+    for (const project of ordinary.filter(item => teamOf(item.seat) === winningTeam)) {
+      awarded[winningTeam] += project.value * (multiplier === 2 ? 2 : 1);
+      rawAwarded[winningTeam] += project.rawValue ?? 0;
+    }
+  }
+  // Baloot is independent of ordinary project priority and always stays two points.
+  for (const project of baloots) {
+    const team = teamOf(project.seat);
+    awarded[team] += 2;
+    rawAwarded[team] += project.rawValue ?? 20;
+  }
+  return { winningTeam, awarded, rawAwarded, winningProject: winner, projects: all };
 }
 
 export function createDoublingState(contract, matchPoints = [0,0]) {
@@ -89,7 +101,7 @@ export function createDoublingState(contract, matchPoints = [0,0]) {
     buyerSeat: contract.buyerSeat ?? contract.bidderSeat,
     buyerTeam: contract.team,
     doublerSeat: null,
-    nextActor: null,
+    nextActor: (Number(contract.buyerSeat ?? contract.bidderSeat) + 1) % 4,
     matchPoints: [...matchPoints]
   };
 }
@@ -104,7 +116,8 @@ export function applyDoublingAction(state, seat, action) {
 
   if (kind === "double") {
     if (next.level !== "normal" || buyerSide) throw new Error("Only the opposing team may double first.");
-    if (action.locked && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
+    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
+    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
     if (next.contractType === "sun" &&
         !(next.matchPoints[buyerTeam] <= 100 && next.matchPoints[1-buyerTeam] > 100)) {
       throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
@@ -113,13 +126,17 @@ export function applyDoublingAction(state, seat, action) {
     next.locked = Boolean(action.locked); next.nextActor = buyer;
   } else if (kind === "three") {
     if (next.level !== "double" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may answer a double with three.");
+    if (next.contractType !== "hokom") throw new Error("Three is available only in Hokom.");
     next.multiplier = 3; next.level = "three"; next.locked = false; next.nextActor = next.doublerSeat;
   } else if (kind === "four") {
     if (next.level !== "three" || buyerSide || seat !== next.doublerSeat) throw new Error("Only the original doubler may answer three with four.");
+    if (next.contractType !== "hokom") throw new Error("Four is available only in Hokom.");
+    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
     next.multiplier = 4; next.level = "four"; next.locked = Boolean(action.locked); next.nextActor = buyer;
   } else if (kind === "gahwa") {
     if (next.level !== "four" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may call Gahwa after four.");
-    next.level = "gahwa"; next.final = true; next.multiplier = 0; next.locked = false; next.nextActor = null;
+    if (next.contractType !== "hokom") throw new Error("Gahwa is available only in Hokom.");
+    next.level = "gahwa"; next.final = true; next.locked = false; next.nextActor = null;
   } else if (kind === "accept") {
     if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
     next.final = true; next.nextActor = null;

@@ -1,7 +1,7 @@
+import { detectProjects, settleProjects, projectDeclarationWindow, createDoublingState, applyDoublingAction, openRuleCall, resolveRuleCall, validateAkkaClaim } from "./baloot-tournament-rules.js";
 // Server-authoritative Saudi Baloot core rules.
 // A hand starts with five cards, an up-card auction, then three more cards.
-// Optional house-table modules (projects, doubles/Gahwa, Qayd and Sawa) are
-// deliberately not simulated until their tournament rule variants are agreed.
+// Saudi tournament projects are declared and settled by the authoritative engine.
 export const SUITS = ["S", "H", "D", "C"];
 export const RANKS = ["7", "8", "9", "J", "Q", "K", "10", "A"];
 const SUN_ORDER = ["7", "8", "9", "J", "Q", "K", "10", "A"];
@@ -48,19 +48,19 @@ function cardPointsToGamePoints(rawPoints, contractType) {
   return Math.floor((rawPoints + 4) / 10);
 }
 
-export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
+export function scoreRound(teamPoints, contract, teamTricks = [0, 0], projectRawPoints = [0, 0], multiplier = 1) {
   const target = contractTargetPoints(contract.type);
   const baseGamePoints = contract.type === "sun" ? 26 : 16;
-  const contractScore = Number(teamPoints[contract.team] || 0);
-  const defendingScore = Number(teamPoints[1 - contract.team] || 0);
-  const countingTeam = 1 - contract.team;
+  const contractScore = Number(teamPoints[contract.team] || 0) + Number(projectRawPoints[contract.team] || 0);
+  const defendingTeam = 1 - contract.team;
+  const defendingScore = Number(teamPoints[defendingTeam] || 0) + Number(projectRawPoints[defendingTeam] || 0);
+  const countingTeam = defendingTeam;
   const countingRawPoints = defendingScore;
-  const countingGamePoints = cardPointsToGamePoints(countingRawPoints, contract.type);
+  const countingGamePoints = cardPointsToGamePoints(Number(teamPoints[countingTeam] || 0), contract.type);
   const contractGamePoints = baseGamePoints - countingGamePoints;
   const cardGamePoints = [0, 0];
   cardGamePoints[countingTeam] = countingGamePoints;
   cardGamePoints[contract.team] = contractGamePoints;
-  const remainder = countingRawPoints % 10;
   const kabootTeam = teamTricks[0] === 8 ? 0 : teamTricks[1] === 8 ? 1 : null;
   const gamePoints = [0, 0];
   let winningTeam;
@@ -68,24 +68,19 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
   if (kabootTeam !== null) {
     winningTeam = kabootTeam;
     gamePoints[kabootTeam] = contract.type === "sun" ? 44 : 25;
+  } else if (contractScore > defendingScore) {
+    winningTeam = contract.team;
+    gamePoints[0] = cardGamePoints[0];
+    gamePoints[1] = cardGamePoints[1];
+  } else if (contractScore < defendingScore || (contractScore === defendingScore && multiplier > 1)) {
+    // In a doubled hand, a raw-point tie is lost by the buyer (the doubled side).
+    winningTeam = defendingTeam;
+    gamePoints[winningTeam] = baseGamePoints;
   } else {
-    if (countingGamePoints > contractGamePoints) {
-      winningTeam = countingTeam;
-    } else if (countingGamePoints < contractGamePoints) {
-      winningTeam = contract.team;
-    } else {
-      const countingTeamWinsTie = contract.type === "hokom"
-        ? [2, 3, 4, 5].includes(remainder)
-        : [1, 2, 3, 4].includes(remainder);
-      winningTeam = countingTeamWinsTie ? countingTeam : contract.team;
-    }
-
-    if (winningTeam === contract.team) {
-      gamePoints[0] = cardGamePoints[0];
-      gamePoints[1] = cardGamePoints[1];
-    } else {
-      gamePoints[winningTeam] = baseGamePoints;
-    }
+    // An ordinary tie is made by the buyer.
+    winningTeam = contract.team;
+    gamePoints[0] = cardGamePoints[0];
+    gamePoints[1] = cardGamePoints[1];
   }
 
   return {
@@ -100,6 +95,7 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
     made: winningTeam === contract.team,
     winningTeam,
     teamPoints: [...teamPoints],
+    projectRawPoints: [...projectRawPoints],
     teamTricks: [...teamTricks],
     gamePoints,
     kaboot: kabootTeam !== null,
@@ -108,7 +104,13 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
 }
 
 export function legalCards(hand, trick, contract, _seat) {
-  if (!trick.length) return hand;
+  if (!trick.length) {
+    if (contract?.type === "hokom" && contract.locked &&
+        hand.some(card => card.suit !== contract.trumpSuit)) {
+      return hand.filter(card => card.suit !== contract.trumpSuit);
+    }
+    return hand;
+  }
   const leadSuit = trick[0].card.suit;
   const following = hand.filter(card => card.suit === leadSuit);
 
@@ -202,7 +204,15 @@ export function createMatch(players, random = Math.random, options = {}) {
     matchPoints: options.matchPoints ? [...options.matchPoints] : [0, 0],
     actionIds: [],
     hostId: options.hostId || null,
-    lastActionAt: new Date().toISOString()
+    lastActionAt: new Date().toISOString(),
+    projectsBySeat: [null, null, null, null],
+    projectsDeclaredBySeat: [false, false, false, false],
+    projectCandidatesBySeat: [null, null, null, null],
+    declarationsClosed: false,
+    projectResult: null,
+    pendingRuleCall: null,
+    ruleCallHistory: [],
+    akkaClaims: []
   };
 }
 
@@ -218,6 +228,7 @@ function dealNextRound(state, random = Math.random) {
     }
   );
   next.actionIds = [...(state.actionIds || [])];
+  next.ruleCallHistory = [...(state.ruleCallHistory || [])];
   return next;
 }
 
@@ -240,11 +251,27 @@ function completeAuction(state) {
   next.stock = [];
   next.faceUp = null;
   next.buyerSeat = buyerSeat;
+  next.contract = { ...contract, buyerSeat };
   next.bidRound = 0;
   next.bidPasses = 0;
   next.sunOvercallEligible = [];
-  next.phase = "playing";
-  next.currentSeat = advanceSeat(next.dealer);
+  next.projectsBySeat = [null, null, null, null];
+  next.projectsDeclaredBySeat = [false, false, false, false];
+  next.projectCandidatesBySeat = next.seats.map((player, seat) => detectProjects(player.hand, next.contract, seat));
+  next.declarationsClosed = false;
+  next.projectResult = null;
+  const sunDoubleAllowed = contract.type === "sun" &&
+    next.matchPoints[buyerSeat % 2] <= 100 && next.matchPoints[1 - (buyerSeat % 2)] > 100;
+  if (contract.type === "hokom" || sunDoubleAllowed) {
+    next.doubling = createDoublingState(next.contract, next.matchPoints);
+    next.phase = "doubling";
+    next.currentSeat = advanceSeat(buyerSeat);
+  } else {
+    next.doubling = null;
+    next.phase = "playing";
+    next.currentSeat = advanceSeat(next.dealer);
+  }
+  next.gahwa = false;
   return next;
 }
 
@@ -382,6 +409,25 @@ function applyBid(next, seat, action) {
   return { type: "bid_called", contract };
 }
 
+function balootAnnouncementCard(state, seat) {
+  if (!state.contract || state.contract.type !== "hokom") return null;
+  const candidates = state.projectCandidatesBySeat?.[seat] || [];
+  const candidate = candidates.find(project => project.type === "baloot");
+  const blocksBalootKind = candidates.some(project => project.type === "hundred" &&
+    project.subtype === "kind" && ["K","Q"].includes(project.rank));
+  if (blocksBalootKind || !candidate || (state.projectsBySeat?.[seat] || []).some(project => project.type === "baloot")) return null;
+  const plays = [
+    ...(state.tricks || []).flatMap(trick => trick.plays || []),
+    ...(state.trick || [])
+  ].filter(play => play.seat === seat);
+  const kingPlayed = plays.some(play => play.card.suit === state.contract.trumpSuit && play.card.rank === "K");
+  const queenPlayed = plays.some(play => play.card.suit === state.contract.trumpSuit && play.card.rank === "Q");
+  const hand = state.seats[seat]?.hand || [];
+  if (kingPlayed && hand.some(card => card.suit === state.contract.trumpSuit && card.rank === "Q")) return state.contract.trumpSuit + ":Q";
+  if (queenPlayed && hand.some(card => card.suit === state.contract.trumpSuit && card.rank === "K")) return state.contract.trumpSuit + ":K";
+  return null;
+}
+
 export function applyMatchAction(state, userId, action, actionId) {
   if (!actionId || typeof actionId !== "string" || actionId.length > 80) {
     throw new Error("A unique action id is required.");
@@ -392,8 +438,54 @@ export function applyMatchAction(state, userId, action, actionId) {
     return { state, duplicate: true, event: null };
   }
 
+  if (action?.type === "call_live_double") {
+    if (state.phase !== "playing" || !state.contract) throw new Error("A live double is available only during an active hand.");
+    if (state.contract.type !== "hokom" && state.contract.type !== "sun") throw new Error("This contract cannot be doubled.");
+    if (teamOf(seat) === state.contract.team) throw new Error("Only the opposing team may double.");
+    if (state.doubling && state.doubling.level !== "normal") throw new Error("This hand has already been doubled.");
+    const sunAllowed = state.contract.type !== "sun" ||
+      (state.matchPoints[state.contract.team] <= 100 && state.matchPoints[1-state.contract.team] > 100);
+    if (!sunAllowed) throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
+    const next = structuredClone(state);
+    const doubling = createDoublingState(next.contract, next.matchPoints);
+    doubling.nextActor = seat;
+    next.doubling = applyDoublingAction(doubling, seat, {type:"double",locked:Boolean(action.locked)});
+    next.resumeSeat = state.currentSeat;
+    next.phase = "doubling";
+    next.currentSeat = next.contract.buyerSeat;
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: {type:"live_double_called",seat,locked:Boolean(action.locked)} };
+  }
+
+  if (action?.type === "call_rule") {
+    if (state.phase !== "playing") throw new Error("Table rule calls are available during play only.");
+    if (action.targetSeat !== undefined && action.targetSeat !== null && (!Number.isInteger(action.targetSeat) || action.targetSeat < 0 || action.targetSeat > 3)) throw new Error("Choose a valid target seat.");
+    if (!["akka","sawa","qayd","takyid","takweesh"].includes(action.kind)) throw new Error("Unsupported table rule call.");
+    const next = openRuleCall(state, seat, action.kind, {
+      id: action.callId || actionId,
+      targetSeat: Number.isInteger(action.targetSeat) ? action.targetSeat : null,
+      evidence: typeof action.evidence === "string" ? action.evidence.slice(0,300) : null
+    });
+    next.ruleCallHistory = [...(state.ruleCallHistory || [])];
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: { type: "rule_call_opened", call: next.pendingRuleCall } };
+  }
+  if (action?.type === "resolve_rule_call") {
+    if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host may record the table ruling.");
+    const next = resolveRuleCall(state, {
+      decision: action.decision,
+      note: action.note,
+      refereeId: String(userId)
+    });
+    next.ruleCallHistory = [...(state.ruleCallHistory || []), structuredClone(next.pendingRuleCall)];
+    next.pendingRuleCall = null;
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: { type: "rule_call_resolved", ruling: next.ruleCallHistory[next.ruleCallHistory.length - 1] } };
+  }
+
   if (action?.type === "next_round") {
     if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
+    if (state.pendingRuleCall) throw new Error("The pending table ruling must be resolved before the next deal.");
     if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host can start the next deal.");
     const next = dealNextRound(state);
     rememberAction(next, actionId);
@@ -404,7 +496,39 @@ export function applyMatchAction(state, userId, action, actionId) {
   const next = structuredClone(state);
   let event;
 
-  if (next.phase === "bidding") {
+  if (next.phase === "doubling") {
+    const buyer = next.buyerSeat;
+    const firstOpponent = advanceSeat(buyer);
+    const secondOpponent = (buyer + 3) % 4;
+    if (action?.type === "pass") {
+      if (seat === firstOpponent) {
+        next.currentSeat = secondOpponent;
+        next.doubling.nextActor = secondOpponent;
+        event = { type: "doubling_passed", seat };
+      } else if (seat === secondOpponent && next.doubling?.level === "normal") {
+        next.doubling.final = true;
+        next.doubling.nextActor = null;
+        next.phase = "playing";
+        next.currentSeat = advanceSeat(next.dealer);
+        event = { type: "doubling_declined" };
+      } else {
+        throw new Error("Only an opposing player may pass on the initial double.");
+      }
+    } else {
+      next.doubling = applyDoublingAction(next.doubling, seat, action);
+      event = { type: "doubling_action", level: next.doubling.level, multiplier: next.doubling.multiplier };
+      if (next.doubling.final) {
+        next.phase = "playing";
+        next.contract = { ...next.contract, locked: Boolean(next.doubling.locked) };
+        next.gahwa = next.doubling.level === "gahwa";
+        next.currentSeat = Number.isInteger(next.resumeSeat) ? next.resumeSeat : advanceSeat(next.dealer);
+        delete next.resumeSeat;
+        event = { type: "doubling_complete", level: next.doubling.level, multiplier: next.doubling.multiplier, gahwa: next.gahwa };
+      } else {
+        next.currentSeat = next.doubling.nextActor;
+      }
+    }
+  } else if (next.phase === "bidding") {
     event = applyBid(next, seat, action);
     if (event.type === "redeal") {
       const redealt = dealNextRound(next);
@@ -412,11 +536,40 @@ export function applyMatchAction(state, userId, action, actionId) {
       return { state: redealt, duplicate: false, event };
     }
   } else if (next.phase === "playing") {
-    if (action?.type !== "play") throw new Error("Play one card.");
+    if (action?.type === "declare_projects") {
+      if (!projectDeclarationWindow(next)) throw new Error("The project declaration window is closed.");
+      if (next.projectsDeclaredBySeat?.[seat]) throw new Error("You have already declared your projects.");
+      const candidates = next.projectCandidatesBySeat?.[seat] || [];
+      const projects = candidates.filter(project => project.type !== "baloot");
+      const blocksBalootKind = projects.some(project => project.subtype === "kind" && ["K","Q"].includes(project.rank));
+      const sequenceShowsBaloot = next.contract.type === "hokom" && !blocksBalootKind &&
+        projects.some(project => project.subtype === "sequence" &&
+          project.suit === next.contract.trumpSuit &&
+          project.ranks?.includes("K") && project.ranks?.includes("Q"));
+      const autoBaloot = sequenceShowsBaloot ? candidates.find(project => project.type === "baloot") : null;
+      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []), ...projects,
+        ...(autoBaloot && !(next.projectsBySeat?.[seat] || []).some(project => project.type === "baloot") ? [autoBaloot] : [])];
+      next.projectsDeclaredBySeat[seat] = true;
+      event = { type: "projects_declared", seat, projects };
+    } else if (action?.type !== "play") throw new Error("Declare projects or play one card.");
+    if (action?.type === "play") {
     const hand = next.seats[seat].hand;
     const index = hand.findIndex(card => cardKey(card) === action.card);
     if (index < 0) throw new Error("That card is not in your hand.");
     const card = hand[index];
+    if (action.announceBaloot) {
+      const expectedBalootCard = balootAnnouncementCard(next, seat);
+      if (!expectedBalootCard || expectedBalootCard !== cardKey(card)) {
+        throw new Error("Baloot must be announced before playing the second trump King or Queen.");
+      }
+      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []),
+        (next.projectCandidatesBySeat?.[seat] || []).find(project => project.type === "baloot")];
+    }
+    if (action.announceAkka) {
+      const remainingCards = next.seats.flatMap(player => player.hand);
+      if (!validateAkkaClaim(card, remainingCards)) throw new Error("Akka is valid only when no higher unplayed card remains in that suit.");
+      next.akkaClaims = [...(next.akkaClaims || []), {seat,card:cardKey(card),trick:next.tricks.length+1}];
+    }
     const legal = legalCards(hand, next.trick, next.contract, seat);
     if (!legal.some(candidate => cardKey(candidate) === cardKey(card))) {
       throw new Error(next.contract.type === "hokom"
@@ -437,17 +590,49 @@ export function applyMatchAction(state, userId, action, actionId) {
       next.currentSeat = winner.seat;
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
-        const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
+        next.declarationsClosed = true;
+        const multiplier = next.doubling?.multiplier || 1;
+        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, multiplier);
+        const result = scoreRound(next.teamPoints, next.contract, next.teamTricks, projectResult.rawAwarded, multiplier);
+        let projectPoints = [...projectResult.awarded];
+        if (result.kaboot) {
+          projectPoints = [0,0];
+          for (const project of projectResult.projects || []) {
+            if (teamOf(project.seat) !== result.winningTeam) continue;
+            projectPoints[result.winningTeam] += project.type === "baloot"
+              ? 2 : project.value * (multiplier === 2 ? 2 : 1);
+          }
+        } else if (!result.made) {
+          projectPoints = [0,0];
+          projectPoints[1 - next.contract.team] = projectResult.awarded.reduce((sum,value)=>sum+value,0);
+        }
+        if (multiplier > 1) {
+          const doubledPoints = [0, 0];
+          const base = next.contract.type === "sun" ? 26 : 16;
+          doubledPoints[result.winningTeam] = result.kaboot
+            ? (next.contract.type === "sun" ? 44 : 25)
+            : base * multiplier;
+          result.gamePoints = doubledPoints;
+          result.totalGamePoints = doubledPoints[0] + doubledPoints[1];
+          result.doubled = true;
+          result.multiplier = multiplier;
+        }
+        result.projectPoints = [...projectPoints];
+        result.projectResult = projectResult;
+        result.gamePoints = result.gamePoints.map((points, team) => points + projectPoints[team]);
+        next.projectResult = projectResult;
         next.matchPoints = next.matchPoints.map((points, team) => points + result.gamePoints[team]);
         const topScore = Math.max(...next.matchPoints);
         const tiedAtTarget = next.matchPoints[0] === next.matchPoints[1] && topScore >= next.targetScore;
-        next.phase = topScore >= next.targetScore && !tiedAtTarget ? "match_complete" : "round_complete";
-        next.roundResult = { ...result, matchPoints: [...next.matchPoints] };
+        next.phase = next.gahwa || (topScore >= next.targetScore && !tiedAtTarget) ? "match_complete" : "round_complete";
+        if (next.gahwa) next.matchWinnerTeam = result.winningTeam;
+        next.roundResult = { ...result, matchPoints: [...next.matchPoints], gahwa: next.gahwa, matchWinnerTeam: next.matchWinnerTeam ?? null };
         event = { type: "round_complete", result: next.roundResult };
       }
     } else {
       next.currentSeat = advanceSeat(seat);
       event = { type: "card_played", seat, card: cardKey(card) };
+    }
     }
   } else {
     throw new Error("This round is complete.");
@@ -468,6 +653,9 @@ export function publicMatchState(state, viewerId) {
     faceUp: state.faceUp || null,
     contract: state.contract,
     buyerSeat: state.buyerSeat,
+    doubling: state.doubling || null,
+    gahwa: Boolean(state.gahwa),
+    matchWinnerTeam: state.matchWinnerTeam ?? null,
     trick: state.trick,
     tricks: state.tricks,
     teamPoints: state.teamPoints,
@@ -476,6 +664,23 @@ export function publicMatchState(state, viewerId) {
     targetScore: state.targetScore,
     matchPoints: state.matchPoints,
     roundResult: state.roundResult || null,
+    projectDeclarations: (state.projectsBySeat || [null,null,null,null]).map((projects, seat) => ({
+      seat, declared: Boolean(state.projectsDeclaredBySeat?.[seat]) || (Array.isArray(projects) && projects.some(project => project.type === "baloot")), projects: Array.isArray(projects) && (state.tricks.length > 0 || state.phase === "round_complete" || state.phase === "match_complete") ? projects : undefined
+    })),
+    projectWindowOpen: projectDeclarationWindow(state),
+    myProjectsDeclared: Boolean(state.projectsDeclaredBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))]),
+    balootAnnouncementCard: balootAnnouncementCard(state, state.seats.findIndex(player => player.userId === String(viewerId))),
+    canDouble: state.phase === "playing" && Boolean(state.contract) &&
+      teamOf(state.seats.findIndex(player => player.userId === String(viewerId))) !== state.contract.team &&
+      (!state.doubling || state.doubling.level === "normal") &&
+      (state.contract.type !== "sun" || (state.matchPoints[state.contract.team] <= 100 && state.matchPoints[1-state.contract.team] > 100)),
+    projectResult: state.projectResult || null,
+    pendingRuleCall: state.pendingRuleCall || null,
+    ruleCallHistory: state.ruleCallHistory || [],
+    akkaClaims: state.akkaClaims || [],
+    akkaEligibleCards: state.currentSeat === state.seats.findIndex(player => player.userId === String(viewerId))
+      ? state.seats[state.currentSeat].hand.filter(card => validateAkkaClaim(card, state.seats.flatMap(player => player.hand))).map(cardKey)
+      : [],
     seats: state.seats.map(player => ({
       name: player.name,
       seat: player.seat,
