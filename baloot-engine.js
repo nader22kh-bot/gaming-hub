@@ -60,7 +60,6 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
   const cardGamePoints = [0, 0];
   cardGamePoints[countingTeam] = countingGamePoints;
   cardGamePoints[contract.team] = contractGamePoints;
-  const remainder = countingRawPoints % 10;
   const kabootTeam = teamTricks[0] === 8 ? 0 : teamTricks[1] === 8 ? 1 : null;
   const gamePoints = [0, 0];
   let winningTeam;
@@ -74,10 +73,9 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
     } else if (countingGamePoints < contractGamePoints) {
       winningTeam = contract.team;
     } else {
-      const countingTeamWinsTie = contract.type === "hokom"
-        ? [2, 3, 4, 5].includes(remainder)
-        : [1, 2, 3, 4].includes(remainder);
-      winningTeam = countingTeamWinsTie ? countingTeam : contract.team;
+      // Saudi table rule: when the game-point count is tied, the entering
+      // (contract/buyer) team loses the hand; the defenders take the round.
+      winningTeam = countingTeam;
     }
 
     if (winningTeam === contract.team) {
