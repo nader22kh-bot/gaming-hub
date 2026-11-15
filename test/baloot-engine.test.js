@@ -289,6 +289,46 @@ function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, co
   return state;
 }
 
+test("a complete four-seat Sun hand stays authoritative across all player sessions", () => {
+  let state=createMatch(players(),()=>0.4,{hostId:"1"});
+  state=applyMatchAction(state,"2",{type:"sun"},"four-seat-sun-buy").state;
+  assert.equal(state.phase,"playing");
+  assert.deepEqual(state.seats.map(player=>player.hand.length),[8,8,8,8]);
+  let moves=0;
+  while(state.phase==="playing"&&moves<32){
+    const seat=state.currentSeat;
+    const userId=state.seats[seat].userId;
+    const view=publicMatchState(state,userId);
+    assert.equal(view.seats[seat].hand.length,state.seats[seat].hand.length);
+    for(let other=0;other<4;other++)if(other!==seat)assert.equal(view.seats[other].hand,undefined);
+    if(view.projectWindowOpen&&!view.myProjectsDeclared){
+      state=applyMatchAction(state,userId,{type:"declare_projects"},"four-seat-project-"+seat).state;
+    }
+    const current=state.seats[seat];
+    const legal=legalCards(current.hand,state.trick,state.contract,seat);
+    state=applyMatchAction(state,userId,{type:"play",card:cardKey(legal[0])},"four-seat-play-"+moves).state;
+    moves++;
+  }
+  assert.equal(moves,32);
+  assert.equal(state.phase,"round_complete");
+  assert.ok(state.roundResult);
+  assert.ok(state.seats.every(player=>player.hand.length===0));
+});
+
+test("Sun double opens only when the buyer is at 100 or less and opponents exceed 100", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.matchPoints=[110,90];
+  state=applyMatchAction(state,"2",{type:"sun"},"sun-eligible-double").state;
+  assert.equal(state.phase,"doubling");
+  assert.equal(state.currentSeat,2);
+  const doubled=applyMatchAction(state,"3",{type:"double",locked:false},"sun-double-action");
+  assert.equal(doubled.state.doubling.multiplier,2);
+  let blocked=createMatch(players(),()=>0.4);
+  blocked.matchPoints=[110,101];
+  blocked=applyMatchAction(blocked,"2",{type:"sun"},"sun-ineligible-double").state;
+  assert.equal(blocked.phase,"playing");
+});
+
 test("a declared trump sequence containing King and Queen automatically includes Baloot", () => {
   let state=createMatch(players(),()=>0.4);
   state.phase="playing";
