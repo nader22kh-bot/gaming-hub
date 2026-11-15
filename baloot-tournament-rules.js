@@ -85,6 +85,7 @@ export function createDoublingState(contract, matchPoints = [0,0]) {
   if (!contract || !["sun","hokom"].includes(contract.type)) throw new Error("A valid contract is required.");
   return {
     multiplier: 1, level: "normal", locked: false, final: false,
+    contractType: contract.type,
     buyerSeat: contract.buyerSeat ?? contract.bidderSeat,
     buyerTeam: contract.team,
     doublerSeat: null,
@@ -104,7 +105,7 @@ export function applyDoublingAction(state, seat, action) {
   if (kind === "double") {
     if (next.level !== "normal" || buyerSide) throw new Error("Only the opposing team may double first.");
     if (action.locked && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
-    if (action.contractType === "sun" &&
+    if (next.contractType === "sun" &&
         !(next.matchPoints[buyerTeam] <= 100 && next.matchPoints[1-buyerTeam] > 100)) {
       throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
     }
