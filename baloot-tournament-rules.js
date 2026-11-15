@@ -36,7 +36,7 @@ export function detectProjects(hand, contract, seat = 0) {
       if (rank === "A" && contract.type === "sun") {
         projects.push({ type: "fourHundred", value: 40, rawValue: 200, rank, seat, priority: 500 });
       } else {
-        projects.push({ type: "hundred", subtype: "kind", value: 10, rank, seat,
+        projects.push({ type: "hundred", subtype: "kind", value: 10, rawValue: 100, rank,
           priority: 300 + (KIND_ORDER.length - 1 - KIND_ORDER.indexOf(rank)) });
       }
     }
@@ -55,7 +55,7 @@ function addSequenceProject(out, length, suit, seat, contractType) {
   if (length < 3) return;
   const type = length >= 5 ? "hundred" : length === 4 ? "fifty" : "sira";
   out.push({ type, subtype: "sequence", length, suit, seat,
-    value: PROJECT_POINTS[contractType][type],
+    value: PROJECT_POINTS[contractType][type],\n    rawValue: type === "sira" ? 20 : type === "fifty" ? 50 : 100,
     priority: type === "hundred" ? 400 : type === "fifty" ? 200 : 150 });
 }
 
