@@ -10,7 +10,7 @@ const card = (suit, rank) => ({suit,rank});
 const padded = cards => {
   const hand = [...cards];
   const used = new Set(hand.map(item => item.suit + ":" + item.rank));
-  for (const suit of ["S","H","D","C"]) {
+  for (const suit of ["D","C","H","S"]) {
     for (const rank of ["7","8","9","J","Q","K","10","A"]) {
       const key = suit + ":" + rank;
       if (!used.has(key) && hand.length < 8) {
@@ -68,7 +68,7 @@ test("only winning team's projects count, and only double doubles project points
   assert.equal(doubled.winningTeam,1);
   assert.deepEqual(doubled.awarded,[0,40]);
   const tripled=settleProjects(bySeat,{type:"sun"},0,3);
-  assert.deepEqual(tripled.awarded,[0,10]);
+  assert.deepEqual(tripled.awarded,[0,20]);
 });
 
 test("Hokom doubling follows Double → Three → Four → Gahwa with buyer/doubler turns", () => {
