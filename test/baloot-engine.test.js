@@ -490,6 +490,7 @@ test("Akka is announced only when the played card is the highest remaining in it
   let state=createMatch(players(),()=>0.4);
   state.phase="playing"; state.contract={type:"sun",bidderSeat:0,buyerSeat:0,team:0,trumpSuit:null};
   state.currentSeat=0;
+  state.seats.forEach(player=>{player.hand=[];});
   state.seats[0].hand=[{suit:"H",rank:"K"}];
   state.seats[1].hand=[{suit:"H",rank:"A"}];
   assert.throws(()=>applyMatchAction(state,"1",{type:"play",card:"H:K",announceAkka:true},"akka-invalid"),/higher unplayed/);
