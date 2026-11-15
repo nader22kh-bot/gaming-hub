@@ -55,7 +55,8 @@ function addSequenceProject(out, length, suit, seat, contractType) {
   if (length < 3) return;
   const type = length >= 5 ? "hundred" : length === 4 ? "fifty" : "sira";
   out.push({ type, subtype: "sequence", length, suit, seat,
-    value: PROJECT_POINTS[contractType][type],\n    rawValue: type === "sira" ? 20 : type === "fifty" ? 50 : 100,
+    value: PROJECT_POINTS[contractType][type],
+    rawValue: type === "sira" ? 20 : type === "fifty" ? 50 : 100,
     priority: type === "hundred" ? 400 : type === "fifty" ? 200 : 150 });
 }
 
