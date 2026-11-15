@@ -227,6 +227,7 @@ function dealNextRound(state, random = Math.random) {
     }
   );
   next.actionIds = [...(state.actionIds || [])];
+  next.ruleCallHistory = [...(state.ruleCallHistory || [])];
   return next;
 }
 
@@ -454,6 +455,7 @@ export function applyMatchAction(state, userId, action, actionId) {
 
   if (action?.type === "call_rule") {
     if (state.phase !== "playing") throw new Error("Table rule calls are available during play only.");
+    if (action.targetSeat !== undefined && action.targetSeat !== null && (!Number.isInteger(action.targetSeat) || action.targetSeat < 0 || action.targetSeat > 3)) throw new Error("Choose a valid target seat.");
     if (!["akka","sawa","qayd","takyid","takweesh"].includes(action.kind)) throw new Error("Unsupported table rule call.");
     const next = openRuleCall(state, seat, action.kind, {
       id: action.callId || actionId,
@@ -479,6 +481,7 @@ export function applyMatchAction(state, userId, action, actionId) {
 
   if (action?.type === "next_round") {
     if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
+    if (state.pendingRuleCall) throw new Error("The pending table ruling must be resolved before the next deal.");
     if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host can start the next deal.");
     const next = dealNextRound(state);
     rememberAction(next, actionId);
