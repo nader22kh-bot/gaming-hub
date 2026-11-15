@@ -7,7 +7,8 @@ import {
 } from "../baloot-engine.js";
 import { detectProjects } from "../baloot-tournament-rules.js";
 
-const card = (suit,rank) => ({suit,rank});\nconst players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
+const card = (suit,rank) => ({suit,rank});
+const players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
 const act = (state, seat, action, id = crypto.randomUUID()) =>
   applyMatchAction(state, state.seats[seat].userId, action, id);
 
@@ -272,7 +273,8 @@ function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, co
   state.hostId = "1";
   state.matchPoints = [...initialPoints];
   state.targetScore = 152;
-  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":gahwa?"gahwa":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };\n  state.gahwa=gahwa;
+  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":gahwa?"gahwa":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };
+  state.gahwa=gahwa;
   state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
   state.currentSeat = 1;
   let counter = 0;
