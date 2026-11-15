@@ -436,6 +436,7 @@ export function applyMatchAction(state, userId, action, actionId) {
   }
 
   if (action?.type === "call_rule") {
+    if (state.phase !== "playing") throw new Error("Table rule calls are available during play only.");
     if (!["akka","sawa","qayd","takyid","takweesh"].includes(action.kind)) throw new Error("Unsupported table rule call.");
     const next = openRuleCall(state, seat, action.kind, {
       id: action.callId || actionId,
