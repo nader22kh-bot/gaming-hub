@@ -435,6 +435,25 @@ export function applyMatchAction(state, userId, action, actionId) {
     return { state, duplicate: true, event: null };
   }
 
+  if (action?.type === "call_live_double") {
+    if (state.phase !== "playing" || !state.contract) throw new Error("A live double is available only during an active hand.");
+    if (state.contract.type !== "hokom" && state.contract.type !== "sun") throw new Error("This contract cannot be doubled.");
+    if (teamOf(seat) === state.contract.team) throw new Error("Only the opposing team may double.");
+    if (state.doubling && state.doubling.level !== "normal") throw new Error("This hand has already been doubled.");
+    const sunAllowed = state.contract.type !== "sun" ||
+      (state.matchPoints[state.contract.team] <= 100 && state.matchPoints[1-state.contract.team] > 100);
+    if (!sunAllowed) throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
+    const next = structuredClone(state);
+    const doubling = createDoublingState(next.contract, next.matchPoints);
+    doubling.nextActor = seat;
+    next.doubling = applyDoublingAction(doubling, seat, {type:"double",locked:Boolean(action.locked)});
+    next.resumeSeat = state.currentSeat;
+    next.phase = "doubling";
+    next.currentSeat = next.contract.buyerSeat;
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: {type:"live_double_called",seat,locked:Boolean(action.locked)} };
+  }
+
   if (action?.type === "call_rule") {
     if (state.phase !== "playing") throw new Error("Table rule calls are available during play only.");
     if (!["akka","sawa","qayd","takyid","takweesh"].includes(action.kind)) throw new Error("Unsupported table rule call.");
@@ -497,7 +516,8 @@ export function applyMatchAction(state, userId, action, actionId) {
         next.phase = "playing";
         next.contract = { ...next.contract, locked: Boolean(next.doubling.locked) };
         next.gahwa = next.doubling.level === "gahwa";
-        next.currentSeat = advanceSeat(next.dealer);
+        next.currentSeat = Number.isInteger(next.resumeSeat) ? next.resumeSeat : advanceSeat(next.dealer);
+        delete next.resumeSeat;
         event = { type: "doubling_complete", level: next.doubling.level, multiplier: next.doubling.multiplier, gahwa: next.gahwa };
       } else {
         next.currentSeat = next.doubling.nextActor;
@@ -624,6 +644,10 @@ export function publicMatchState(state, viewerId) {
     projectWindowOpen: projectDeclarationWindow(state),
     myProjectsDeclared: Boolean(state.projectsDeclaredBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))]),
     balootAnnouncementCard: balootAnnouncementCard(state, state.seats.findIndex(player => player.userId === String(viewerId))),
+    canDouble: state.phase === "playing" && Boolean(state.contract) &&
+      teamOf(state.seats.findIndex(player => player.userId === String(viewerId))) !== state.contract.team &&
+      (!state.doubling || state.doubling.level === "normal") &&
+      (state.contract.type !== "sun" || (state.matchPoints[state.contract.team] <= 100 && state.matchPoints[1-state.contract.team] > 100)),
     projectResult: state.projectResult || null,
     pendingRuleCall: state.pendingRuleCall || null,
     ruleCallHistory: state.ruleCallHistory || [],
