@@ -125,6 +125,32 @@
         controls=`<div class="multi-controls"><button class="game-action" data-bid="sun">☀️ ${t("Sun","صن")}</button>${hokomControl}${ashkalAllowed?`<button class="answer" data-bid="ashkal">${t("Ashkal · Sun for partner","أشكل · صن للشريك")}</button>`:""}<button class="answer" data-bid="pass">${t("Pass","بس")}</button></div>`;
       }else controls=`<p class="muted">${t("Waiting for the current bidder…","بانتظار المزايد الحالي…")}</p>`;
       controls+=`<div class="baloot-upcard"><b>${t("Up-card","الورقة المكشوفة")}</b><span>${escape(up)}</span><small>${t("Auction round","جولة الشراء")} ${room.bidRound||1}/2</small></div>`;
+    }else if(room.phase==="doubling"){
+      const d=room.doubling||{};
+      const canRespond=d.nextActor===mySeat?.seat;
+      if(myTurn&&d.level==="normal"){
+        controls=`<p>${t("The opposing team may double the contract","للفريق المقابل حق الدبل")}</p>
+          <div class="multi-controls">
+            <button class="game-action" data-double="double" data-lock="false">${t("Double · Open","دبل مفتوح")}</button>
+            <button class="answer" data-double="double" data-lock="true">${t("Double · Closed","دبل مقفل")}</button>
+            <button class="answer" data-double="pass">${t("Pass","ولا")}</button>
+          </div>`;
+      }else if(myTurn&&canRespond&&d.level==="double"&&mySeat.seat===d.buyerSeat){
+        controls=`<p>${t("Respond to the double","الرد على الدبل")}</p><div class="multi-controls">
+          <button class="game-action" data-double="three">${t("Three ×3","ثري ×3")}</button>
+          <button class="answer" data-double="accept">${t("Accept","قبول")}</button></div>`;
+      }else if(myTurn&&canRespond&&d.level==="three"&&mySeat.seat===d.doublerSeat){
+        controls=`<p>${t("Respond to Three","الرد على الثري")}</p><div class="multi-controls">
+          <button class="game-action" data-double="four" data-lock="false">${t("Four · Open","فور مفتوح")}</button>
+          <button class="answer" data-double="four" data-lock="true">${t("Four · Closed","فور مقفل")}</button>
+          <button class="answer" data-double="accept">${t("Accept","قبول")}</button></div>`;
+      }else if(myTurn&&canRespond&&d.level==="four"&&mySeat.seat===d.buyerSeat){
+        controls=`<p>${t("Final response","الرد الأخير")}</p><div class="multi-controls">
+          <button class="game-action" data-double="gahwa">${t("Gahwa ☕ · Win the match","قهوة ☕ · حسم الصكة")}</button>
+          <button class="answer" data-double="accept">${t("Accept Four","قبول الفور")}</button></div>`;
+      }else{
+        controls=`<p class="muted">${t("Waiting for the doubling decision…","بانتظار قرار الدبل…")}</p>`;
+      }
     }else if(room.phase==="playing"&&myTurn){
       const projectButton=room.projectWindowOpen&&!room.myProjectsDeclared
         ?`<button class="answer" id="multiDeclareProjects">${t("Declare projects","إعلان المشاريع")}</button>`
@@ -168,6 +194,11 @@
     document.querySelectorAll("[data-bid]").forEach(button=>button.onclick=()=>{
       const action={type:button.dataset.bid};
       if(action.type==="hokom")action.trumpSuit=room.bidRound===1?room.faceUp.suit:$("multiTrump").value;
+      send(action);
+    });
+    document.querySelectorAll("[data-double]").forEach(button=>button.onclick=()=>{
+      const action={type:button.dataset.double};
+      if(button.dataset.lock!==undefined)action.locked=button.dataset.lock==="true";
       send(action);
     });
     $("multiDeclareProjects")?.addEventListener("click",()=>send({type:"declare_projects"}));
