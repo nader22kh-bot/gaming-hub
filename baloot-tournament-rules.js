@@ -37,7 +37,7 @@ export function detectProjects(hand, contract, seat = 0) {
         projects.push({ type: "fourHundred", value: 40, rank, seat, priority: 500 });
       } else {
         projects.push({ type: "hundred", subtype: "kind", value: 10, rank, seat,
-          priority: 300 + KIND_ORDER.indexOf(rank) });
+          priority: 300 + (KIND_ORDER.length - 1 - KIND_ORDER.indexOf(rank)) });
       }
     }
   }
@@ -73,11 +73,15 @@ export function settleProjects(projectsBySeat, contract, dealer, multiplier = 1)
   const ordered = [...all].sort((a,b)=>compareProjects(a,b,dealer));
   const winner = ordered[0];
   const winningTeam = teamOf(winner.seat);
-  const raw = all.filter(project => teamOf(project.seat) === winningTeam)
-    .reduce((sum, project) => sum + project.value, 0);
-  // Official regulations double projects only for a double; not for three/four.
+  const winningTeamProjects = all.filter(project => teamOf(project.seat) === winningTeam);
+  // Baloot remains two points even when the hand is doubled. Other projects
+  // are doubled only at x2; Three and Four never multiply project points.
+  const raw = winningTeamProjects.reduce((sum, project) => sum + project.value, 0);
+  const doubledBonus = multiplier === 2
+    ? winningTeamProjects.reduce((sum, project) => sum + (project.type === "baloot" ? 0 : project.value), 0)
+    : 0;
   const awarded = [0,0];
-  awarded[winningTeam] = raw * (multiplier === 2 ? 2 : 1);
+  awarded[winningTeam] = raw + doubledBonus;
   return { winningTeam, awarded, winningProject: winner, projects: all };
 }
 
