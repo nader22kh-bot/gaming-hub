@@ -329,6 +329,18 @@ test("Sun double opens only when the buyer is at 100 or less and opponents excee
   assert.equal(blocked.phase,"playing");
 });
 
+test("a declared hundred of Kings or Queens suppresses Baloot", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.currentSeat=1;
+  const hand=[card("S","K"),card("H","K"),card("D","K"),card("C","K"),card("S","Q"),card("S","A"),card("S","J"),card("H","7")];
+  state.seats[1].hand=hand;
+  state.projectCandidatesBySeat[1]=detectProjects(hand,state.contract,1);
+  const declared=applyMatchAction(state,"2",{type:"declare_projects"},"hundred-kings");
+  assert.ok(!declared.state.projectsBySeat[1].some(project=>project.type==="baloot"));
+  assert.equal(publicMatchState(declared.state,"2").balootAnnouncementCard,null);
+});
+
 test("a declared trump sequence containing King and Queen automatically includes Baloot", () => {
   let state=createMatch(players(),()=>0.4);
   state.phase="playing";
