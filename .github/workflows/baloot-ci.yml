@@ -1,0 +1,28 @@
+name: Baloot multiplayer checks
+
+on:
+  push:
+    branches:
+      - feat/saudi-baloot-multiplayer
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm test
+      - name: Syntax checks
+        run: |
+          node --check server.js
+          node --check baloot-engine.js
+          node --check public/app.js
+          node --check public/baloot-multiplayer.js
+          node --check public/new-games.js
+          node --check public/crash.js

@@ -1,10 +1,15 @@
-// Pure, server-authoritative Baloot card rules. No client-supplied score or winner is trusted.
+// Server-authoritative Saudi Baloot core rules.
+// A hand starts with five cards, an up-card auction, then three more cards.
+// Optional house-table modules (projects, doubles/Gahwa, Qayd and Sawa) are
+// deliberately not simulated until their tournament rule variants are agreed.
 export const SUITS = ["S", "H", "D", "C"];
 export const RANKS = ["7", "8", "9", "J", "Q", "K", "10", "A"];
 const SUN_ORDER = ["7", "8", "9", "J", "Q", "K", "10", "A"];
 const HOKOM_TRUMP_ORDER = ["7", "8", "Q", "K", "10", "A", "9", "J"];
 const SUN_POINTS = { "7": 0, "8": 0, "9": 0, J: 2, Q: 3, K: 4, "10": 10, A: 11 };
 const TRUMP_POINTS = { "7": 0, "8": 0, "9": 14, J: 20, Q: 3, K: 4, "10": 10, A: 11 };
+const advanceSeat = seat => (seat + 1) % 4;
+export const teamOf = seat => seat % 2;
 
 export function makeDeck(random = Math.random) {
   const deck = SUITS.flatMap(suit => RANKS.map(rank => ({ suit, rank })));
@@ -14,124 +19,325 @@ export function makeDeck(random = Math.random) {
   }
   return deck;
 }
+
 export function cardKey(card) { return card.suit + ":" + card.rank; }
-export function rankValue(card, contract, leadSuit) {
-  const trump = contract?.type === "hokom" && card.suit === contract.trumpSuit;
-  const order = trump ? HOKOM_TRUMP_ORDER : SUN_ORDER;
+
+export function rankValue(card, contract) {
+  const order = contract?.type === "hokom" && card.suit === contract.trumpSuit
+    ? HOKOM_TRUMP_ORDER : SUN_ORDER;
   return order.indexOf(card.rank);
 }
+
 export function cardPoints(card, contract) {
-  return (contract?.type === "hokom" && card.suit === contract.trumpSuit ? TRUMP_POINTS : SUN_POINTS)[card.rank];
+  return (contract?.type === "hokom" && card.suit === contract.trumpSuit
+    ? TRUMP_POINTS : SUN_POINTS)[card.rank];
 }
+
 export function contractTargetPoints(contractType) {
   if (contractType === "sun") return 65;
   if (contractType === "hokom") return 81;
   throw new Error("Unknown Baloot contract.");
 }
-export function scoreRound(teamPoints, contract) {
+
+export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
   const target = contractTargetPoints(contract.type);
-  const made = teamPoints[contract.team] > target;
-  return { contractTeam: contract.team, contractType: contract.type, contractTarget: target,
-    contractScore: teamPoints[contract.team], defendingScore: teamPoints[1-contract.team],
-    made, winningTeam: made ? contract.team : 1-contract.team, teamPoints: [...teamPoints] };
-}
-export function legalCards(hand, trick, contract) {
-  if (!trick.length) return hand;
-  const lead = trick[0].card.suit;
-  const following = hand.filter(c => c.suit === lead);
-  if (following.length) return following;
-  if (contract?.type === "hokom") {
-    const trumps = hand.filter(c => c.suit === contract.trumpSuit);
-    if (trumps.length) return trumps;
+  const totalRaw = contract.type === "sun" ? 130 : 162;
+  const baseGamePoints = contract.type === "sun" ? 26 : 16;
+  const contractScore = Number(teamPoints[contract.team] || 0);
+  const defendingScore = Number(teamPoints[1 - contract.team] || 0);
+  const made = contractScore > target && contractScore > defendingScore;
+  const kabootTeam = teamTricks[0] === 8 ? 0 : teamTricks[1] === 8 ? 1 : null;
+  const gamePoints = [0, 0];
+  let winningTeam;
+
+  if (kabootTeam !== null) {
+    winningTeam = kabootTeam;
+    gamePoints[kabootTeam] = contract.type === "sun" ? 44 : 25;
+  } else if (!made) {
+    winningTeam = 1 - contract.team;
+    gamePoints[winningTeam] = baseGamePoints;
+  } else {
+    winningTeam = contract.team;
+    const buyerPoints = Math.round(contractScore * baseGamePoints / totalRaw);
+    gamePoints[contract.team] = buyerPoints;
+    gamePoints[1 - contract.team] = baseGamePoints - buyerPoints;
   }
-  return hand;
+
+  return {
+    contractTeam: contract.team,
+    contractType: contract.type,
+    contractTarget: target,
+    contractScore,
+    defendingScore,
+    made,
+    winningTeam,
+    teamPoints: [...teamPoints],
+    teamTricks: [...teamTricks],
+    gamePoints,
+    kaboot: kabootTeam !== null,
+    totalGamePoints: gamePoints.reduce((sum, value) => sum + value, 0)
+  };
 }
+
+export function legalCards(hand, trick, contract, seat) {
+  if (!trick.length) return hand;
+  const leadSuit = trick[0].card.suit;
+  const following = hand.filter(card => card.suit === leadSuit);
+
+  if (following.length) {
+    if (contract?.type === "hokom" && leadSuit === contract.trumpSuit) {
+      const highestTrump = Math.max(...trick
+        .filter(play => play.card.suit === contract.trumpSuit)
+        .map(play => rankValue(play.card, contract)));
+      const overtrumps = following.filter(card => rankValue(card, contract) > highestTrump);
+      return overtrumps.length ? overtrumps : following;
+    }
+    return following;
+  }
+
+  if (contract?.type !== "hokom") return hand;
+  const currentWinner = winningPlay(trick, contract);
+  if (seat !== undefined && teamOf(currentWinner.seat) === teamOf(seat)) return hand;
+
+  const trumps = hand.filter(card => card.suit === contract.trumpSuit);
+  if (!trumps.length) return hand;
+  const tableTrumps = trick.filter(play => play.card.suit === contract.trumpSuit);
+  if (tableTrumps.length) {
+    const highestTrump = Math.max(...tableTrumps.map(play => rankValue(play.card, contract)));
+    const overtrumps = trumps.filter(card => rankValue(card, contract) > highestTrump);
+    return overtrumps.length ? overtrumps : trumps;
+  }
+  return trumps;
+}
+
 export function winningPlay(trick, contract) {
   if (!trick.length) throw new Error("A trick needs at least one card.");
-  const lead = trick[0].card.suit;
-  const trumps = contract?.type === "hokom" ? trick.filter(p => p.card.suit === contract.trumpSuit) : [];
-  const pool = trumps.length ? trumps : trick.filter(p => p.card.suit === lead);
-  return pool.reduce((best, play) =>
-    rankValue(play.card, contract, lead) > rankValue(best.card, contract, lead) ? play : best
+  const leadSuit = trick[0].card.suit;
+  const trumps = contract?.type === "hokom"
+    ? trick.filter(play => play.card.suit === contract.trumpSuit) : [];
+  const candidates = trumps.length
+    ? trumps : trick.filter(play => play.card.suit === leadSuit);
+  return candidates.reduce((best, play) =>
+    rankValue(play.card, contract) > rankValue(best.card, contract) ? play : best
   );
 }
+
 export function dealHands(deck = makeDeck()) {
   if (deck.length !== 32) throw new Error("Baloot requires a 32-card deck.");
   return [0, 1, 2, 3].map(seat => deck.slice(seat * 8, seat * 8 + 8));
 }
-export function createMatch(players, random = Math.random) {
-  if (!Array.isArray(players) || players.length !== 4 || new Set(players.map(p => String(p.userId))).size !== 4) {
+
+function dealFirstFive(deck, dealer) {
+  const hands = [[], [], [], []];
+  let cursor = 0;
+  for (const packetSize of [3, 2]) {
+    for (let offset = 1; offset <= 4; offset++) {
+      const seat = (dealer + offset) % 4;
+      for (let card = 0; card < packetSize; card++) hands[seat].push(deck[cursor++]);
+    }
+  }
+  const faceUp = deck[cursor++];
+  return { hands, faceUp, stock: deck.slice(cursor) };
+}
+
+export function createMatch(players, random = Math.random, options = {}) {
+  if (!Array.isArray(players) || players.length !== 4 ||
+      new Set(players.map(player => String(player.userId))).size !== 4) {
     throw new Error("Exactly four different players are required.");
   }
+  const dealer = Number.isInteger(options.dealer) ? ((options.dealer % 4) + 4) % 4 : 0;
   const deck = makeDeck(random);
-  const hands = dealHands(deck);
-  const seats = players.map((p, seat) => ({
-    userId: String(p.userId), name: p.name || "Player " + (seat + 1), seat, ready: true, hand: hands[seat]
+  const initial = dealFirstFive(deck, dealer);
+  const seats = players.map((player, seat) => ({
+    userId: String(player.userId),
+    name: player.name || "Player " + (seat + 1),
+    seat,
+    ready: true,
+    hand: initial.hands[seat]
   }));
   return {
-    phase: "bidding", seats, dealer: 0, currentSeat: 1, contract: null,
-    bidPasses: 0, bidHistory: [], trick: [], tricks: [], teamPoints: [0, 0],
-    teamTricks: [0, 0], round: 1, targetScore: 152, matchPoints: [0, 0],
-    actionIds: [], lastActionAt: new Date().toISOString()
+    phase: "bidding",
+    seats,
+    dealer,
+    currentSeat: advanceSeat(dealer),
+    bidRound: 1,
+    bidPasses: 0,
+    bidHistory: [],
+    faceUp: initial.faceUp,
+    stock: initial.stock,
+    contract: null,
+    buyerSeat: null,
+    trick: [],
+    tricks: [],
+    teamPoints: [0, 0],
+    teamTricks: [0, 0],
+    round: options.round || 1,
+    targetScore: 152,
+    matchPoints: options.matchPoints ? [...options.matchPoints] : [0, 0],
+    actionIds: [],
+    hostId: options.hostId || null,
+    lastActionAt: new Date().toISOString()
   };
 }
-function advanceSeat(seat) { return (seat + 1) % 4; }
-function teamOf(seat) { return seat % 2; }
-function dealNextRound(state) {
-  const next = createMatch(state.seats.map(p => ({ userId: p.userId, name: p.name })));
-  next.dealer = advanceSeat(state.dealer);
-  next.currentSeat = advanceSeat(next.dealer);
-  next.round = state.round + 1;
-  next.matchPoints = state.matchPoints;
+
+function dealNextRound(state, random = Math.random) {
+  const next = createMatch(
+    state.seats.map(player => ({ userId: player.userId, name: player.name })),
+    random,
+    {
+      dealer: advanceSeat(state.dealer),
+      round: state.round + 1,
+      matchPoints: state.matchPoints,
+      hostId: state.hostId
+    }
+  );
+  next.actionIds = [...(state.actionIds || [])];
   return next;
 }
+
+function completeAuction(state) {
+  if (!state.contract) throw new Error("There is no contract to complete.");
+  const next = state;
+  const contract = next.contract;
+  const buyerSeat = contract.ashkal ? (contract.bidderSeat + 2) % 4 : contract.bidderSeat;
+  const stock = [...next.stock];
+  for (let offset = 1; offset <= 4; offset++) {
+    const seat = (next.dealer + offset) % 4;
+    const extra = seat === buyerSeat ? 2 : 3;
+    const cards = stock.splice(0, extra);
+    if (seat === buyerSeat) next.seats[seat].hand.push(contract.ashkal ? next.faceUp : next.faceUp, ...cards);
+    else next.seats[seat].hand.push(...cards);
+  }
+  if (stock.length !== 0 || next.seats.some(player => player.hand.length !== 8)) {
+    throw new Error("The Baloot deal could not be completed.");
+  }
+  next.stock = [];
+  next.faceUp = null;
+  next.buyerSeat = buyerSeat;
+  next.bidRound = 0;
+  next.bidPasses = 0;
+  next.phase = "playing";
+  next.currentSeat = advanceSeat(next.dealer);
+  return next;
+}
+
+function rememberAction(state, actionId) {
+  state.actionIds = [...(state.actionIds || []), actionId].slice(-100);
+  state.lastActionAt = new Date().toISOString();
+}
+
+function applyBid(next, seat, action) {
+  const bid = action?.type;
+  if (!["pass", "sun", "hokom", "ashkal"].includes(bid)) {
+    throw new Error("Choose Sun, Hokom, or Pass.");
+  }
+
+  if (bid === "pass") {
+    next.bidPasses++;
+    next.bidHistory.push({ seat, bid: "pass", bidRound: next.bidRound });
+    if (next.contract && next.bidPasses >= 3) {
+      completeAuction(next);
+      return { type: "contract_set", contract: next.contract };
+    }
+    if (!next.contract && next.bidPasses >= 4) {
+      if (next.bidRound === 1) {
+        next.bidRound = 2;
+        next.bidPasses = 0;
+        next.currentSeat = advanceSeat(next.dealer);
+        return { type: "second_bidding_round" };
+      }
+      return { type: "redeal" };
+    }
+    next.currentSeat = advanceSeat(seat);
+    return { type: "bid_passed", seat };
+  }
+
+  if (next.contract?.type === "sun") throw new Error("Sun is already the highest bid.");
+  if (next.contract && !(next.bidRound === 1 && next.contract.type === "hokom" && bid === "sun")) {
+    throw new Error("Only Sun may overcall a first-round Hokom bid.");
+  }
+
+  let contract;
+  if (bid === "sun") {
+    contract = { type: "sun", bidderSeat: seat, team: teamOf(seat), trumpSuit: null, ashkal: false };
+  } else if (bid === "ashkal") {
+    const ashkalSeat = seat === next.dealer || seat === (next.dealer + 3) % 4;
+    if (next.bidRound !== 1 || next.contract || !ashkalSeat || next.faceUp?.rank === "A") {
+      throw new Error("Ashkal is not available from this seat or on this up-card.");
+    }
+    contract = { type: "sun", bidderSeat: seat, team: teamOf(seat), trumpSuit: null, ashkal: true };
+  } else {
+    if (next.contract) throw new Error("A Hokom contract has already been called.");
+    const suit = action.trumpSuit || (next.bidRound === 1 ? next.faceUp?.suit : null);
+    if (!SUITS.includes(suit)) throw new Error("Choose a valid Hokom trump suit.");
+    if (next.bidRound === 1 && suit !== next.faceUp.suit) {
+      throw new Error("First-round Hokom must use the face-up card's suit.");
+    }
+    if (next.bidRound === 2 && suit === next.faceUp.suit) {
+      throw new Error("Second-round Hokom must choose a different suit.");
+    }
+    contract = { type: "hokom", bidderSeat: seat, team: teamOf(seat), trumpSuit: suit, ashkal: false };
+  }
+
+  next.contract = contract;
+  next.bidPasses = 0;
+  next.bidHistory.push({
+    seat,
+    bid,
+    bidRound: next.bidRound,
+    trumpSuit: contract.trumpSuit,
+    buyerSeat: contract.ashkal ? (seat + 2) % 4 : seat
+  });
+  next.currentSeat = advanceSeat(seat);
+  return { type: "bid_called", contract };
+}
+
 export function applyMatchAction(state, userId, action, actionId) {
-  if (!actionId || typeof actionId !== "string" || actionId.length > 80) throw new Error("A unique action id is required.");
-  if (state.actionIds.includes(actionId)) return { state, duplicate: true, event: null };
-  const seat = state.seats.findIndex(p => p.userId === String(userId));
+  if (!actionId || typeof actionId !== "string" || actionId.length > 80) {
+    throw new Error("A unique action id is required.");
+  }
+  const seat = state.seats.findIndex(player => player.userId === String(userId));
   if (seat < 0) throw new Error("You are not seated at this table.");
+  if ((state.actionIds || []).includes(actionId)) {
+    return { state, duplicate: true, event: null };
+  }
+
+  if (action?.type === "next_round") {
+    if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
+    if (state.hostId && state.hostId !== String(userId)) throw new Error("Only the table host can start the next deal.");
+    const next = dealNextRound(state);
+    rememberAction(next, actionId);
+    return { state: next, duplicate: false, event: { type: "next_round" } };
+  }
+
   if (seat !== state.currentSeat) throw new Error("It is not your turn.");
   const next = structuredClone(state);
   let event;
+
   if (next.phase === "bidding") {
-    const bid = action?.type;
-    if (!["pass", "sun", "hokom"].includes(bid)) throw new Error("Choose Sun, Hokom, or Pass.");
-    if (bid === "pass") {
-      next.bidPasses++;
-      next.bidHistory.push({ seat, bid: "pass" });
-      if (!next.contract && next.bidPasses === 4) {
-        const redealt = dealNextRound(next);
-        redealt.actionIds = [...next.actionIds, actionId].slice(-50);
-        return { state: redealt, duplicate: false, event: { type: "redeal" } };
-      }
-      if (next.contract && next.bidPasses >= 3) {
-        next.phase = "playing";
-        next.currentSeat = advanceSeat(next.dealer);
-        event = { type: "contract_set", contract: next.contract };
-      } else next.currentSeat = advanceSeat(seat);
-    } else {
-      if (next.contract) throw new Error("A contract has already been called; pass to confirm it.");
-      next.contract = bid === "sun"
-        ? { type: "sun", bidderSeat: seat, team: teamOf(seat), trumpSuit: null }
-        : { type: "hokom", bidderSeat: seat, team: teamOf(seat), trumpSuit: action.trumpSuit };
-      if (bid === "hokom" && !SUITS.includes(action.trumpSuit)) throw new Error("Choose a valid Hokom trump suit.");
-      next.bidPasses = 0;
-      next.bidHistory.push({ seat, bid, trumpSuit: action.trumpSuit || null });
-      next.currentSeat = advanceSeat(seat);
+    event = applyBid(next, seat, action);
+    if (event.type === "redeal") {
+      const redealt = dealNextRound(next);
+      rememberAction(redealt, actionId);
+      return { state: redealt, duplicate: false, event };
     }
   } else if (next.phase === "playing") {
     if (action?.type !== "play") throw new Error("Play one card.");
     const hand = next.seats[seat].hand;
-    const index = hand.findIndex(c => cardKey(c) === action.card);
+    const index = hand.findIndex(card => cardKey(card) === action.card);
     if (index < 0) throw new Error("That card is not in your hand.");
     const card = hand[index];
-    const legal = legalCards(hand, next.trick, next.contract);
-    if (!legal.some(c => cardKey(c) === cardKey(card))) throw new Error("You must follow suit (or trump when required).");
+    const legal = legalCards(hand, next.trick, next.contract, seat);
+    if (!legal.some(candidate => cardKey(candidate) === cardKey(card))) {
+      throw new Error(next.contract.type === "hokom"
+        ? "You must follow suit, trump an opponent, or overtrump when required."
+        : "You must follow the led suit when possible.");
+    }
     hand.splice(index, 1);
     next.trick.push({ seat, card });
     if (next.trick.length === 4) {
       const winner = winningPlay(next.trick, next.contract);
-      const trickPoints = next.trick.reduce((sum, p) => sum + cardPoints(p.card, next.contract), 0);
+      const trickPoints = next.trick.reduce((sum, play) => sum + cardPoints(play.card, next.contract), 0);
       const trickNo = next.tricks.length + 1;
       const total = trickPoints + (trickNo === 8 ? 10 : 0);
       next.teamPoints[teamOf(winner.seat)] += total;
@@ -141,12 +347,10 @@ export function applyMatchAction(state, userId, action, actionId) {
       next.currentSeat = winner.seat;
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
-        const contractTeam = next.contract.team;
-        const score = scoreRound(next.teamPoints, next.contract);
-        const winningTeam = score.winningTeam;
-        next.matchPoints[winningTeam] += next.contract.type === "sun" ? 26 : 16;
+        const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
+        next.matchPoints = next.matchPoints.map((points, team) => points + result.gamePoints[team]);
         next.phase = Math.max(...next.matchPoints) >= next.targetScore ? "match_complete" : "round_complete";
-        next.roundResult = { ...score, teamTricks: [...next.teamTricks] };
+        next.roundResult = { ...result, matchPoints: [...next.matchPoints] };
         event = { type: "round_complete", result: next.roundResult };
       }
     } else {
@@ -156,35 +360,45 @@ export function applyMatchAction(state, userId, action, actionId) {
   } else {
     throw new Error("This round is complete.");
   }
-  next.actionIds = [...next.actionIds, actionId].slice(-50);
-  next.lastActionAt = new Date().toISOString();
+
+  rememberAction(next, actionId);
   return { state: next, duplicate: false, event };
 }
+
 export function publicMatchState(state, viewerId) {
   return {
-    phase: state.phase, dealer: state.dealer, currentSeat: state.currentSeat,
-    contract: state.contract, bidPasses: state.bidPasses, bidHistory: state.bidHistory,
-    trick: state.trick, tricks: state.tricks, teamPoints: state.teamPoints,
-    teamTricks: state.teamTricks, round: state.round, targetScore: state.targetScore,
-    matchPoints: state.matchPoints, roundResult: state.roundResult || null,
-    seats: state.seats.map(p => ({
-      name: p.name, seat: p.seat, ready: p.ready, isMe: p.userId === String(viewerId),
-      cardsCount: p.hand.length, hand: p.userId === String(viewerId) ? p.hand : undefined
+    phase: state.phase,
+    dealer: state.dealer,
+    currentSeat: state.currentSeat,
+    bidRound: state.bidRound,
+    bidPasses: state.bidPasses,
+    bidHistory: state.bidHistory,
+    faceUp: state.faceUp || null,
+    contract: state.contract,
+    buyerSeat: state.buyerSeat,
+    trick: state.trick,
+    tricks: state.tricks,
+    teamPoints: state.teamPoints,
+    teamTricks: state.teamTricks,
+    round: state.round,
+    targetScore: state.targetScore,
+    matchPoints: state.matchPoints,
+    roundResult: state.roundResult || null,
+    seats: state.seats.map(player => ({
+      name: player.name,
+      seat: player.seat,
+      team: teamOf(player.seat),
+      ready: player.ready,
+      isMe: player.userId === String(viewerId),
+      cardsCount: player.hand.length,
+      hand: player.userId === String(viewerId) ? player.hand : undefined
     }))
   };
 }
 
-
-/**
- * CPU bidding heuristic for a four-seat Baloot table.
- * Returns a legal bid object; the server remains the source of truth.
- */
 export function chooseAiBid(hand, state, seat) {
-  if (state.contract) return { type: "pass" };
-  const points = hand.reduce((sum, card) => sum + SUN_POINTS[card.rank], 0);
-  const aces = hand.filter(card => card.rank === "A").length;
-  const kings = hand.filter(card => card.rank === "K").length;
-  const sunStrength = points + aces * 2 + kings;
+  const sunStrength = hand.reduce((sum, card) => sum + SUN_POINTS[card.rank], 0) +
+    hand.filter(card => card.rank === "A").length * 2;
   const suitStrength = SUITS.map(suit => {
     const cards = hand.filter(card => card.suit === suit);
     const trumpPower = cards.reduce((sum, card) => sum + ({
@@ -192,17 +406,27 @@ export function chooseAiBid(hand, state, seat) {
     }[card.rank]), 0);
     return { suit, cards, score: trumpPower + Math.max(0, cards.length - 2) * 2 };
   }).sort((a, b) => b.score - a.score);
-  const bestTrump = suitStrength[0];
-  if (bestTrump.cards.length >= 3 && bestTrump.score >= 10) {
-    return { type: "hokom", trumpSuit: bestTrump.suit };
+  if (state.contract) {
+    if (state.contract.type === "hokom" && state.bidRound === 1 && sunStrength >= 48) return { type: "sun" };
+    return { type: "pass" };
   }
-  if (sunStrength >= 43) return { type: "sun" };
-  return { type: "pass" };
+  if (state.bidRound === 1) {
+    const faceSuit = suitStrength.find(item => item.suit === state.faceUp?.suit);
+    if (faceSuit && faceSuit.cards.length >= 2 && faceSuit.score >= 7) {
+      return { type: "hokom", trumpSuit: state.faceUp.suit };
+    }
+    if (sunStrength >= 48) return { type: "sun" };
+    return { type: "pass" };
+  }
+  const bestOtherSuit = suitStrength.find(item => item.suit !== state.faceUp?.suit);
+  if (bestOtherSuit && bestOtherSuit.cards.length >= 3 && bestOtherSuit.score >= 10) {
+    return { type: "hokom", trumpSuit: bestOtherSuit.suit };
+  }
+  return sunStrength >= 48 ? { type: "sun" } : { type: "pass" };
 }
 
-/** Selects a legal card with a simple partner-aware trick heuristic. */
 export function chooseAiCard(hand, trick, contract, seat) {
-  const legal = legalCards(hand, trick, contract);
+  const legal = legalCards(hand, trick, contract, seat);
   if (legal.length === 1) return legal[0];
   if (!trick.length) {
     return [...legal].sort((a, b) =>
@@ -211,24 +435,26 @@ export function chooseAiCard(hand, trick, contract, seat) {
     )[0];
   }
   const currentWinner = winningPlay(trick, contract);
-  const partnerWinning = currentWinner.seat % 2 === seat % 2;
+  const partnerWinning = teamOf(currentWinner.seat) === teamOf(seat);
   const ranked = legal.map(card => {
-    const candidate = [...trick, { seat, card }];
-    const winner = winningPlay(candidate, contract);
-    const wins = winner.seat === seat;
-    return { card, wins, points: cardPoints(card, contract), rank: rankValue(card, contract) };
+    const winner = winningPlay([...trick, { seat, card }], contract);
+    return {
+      card,
+      wins: winner.seat === seat,
+      points: cardPoints(card, contract),
+      rank: rankValue(card, contract)
+    };
   });
   if (partnerWinning) {
     return ranked.sort((a, b) => a.points - b.points || a.rank - b.rank)[0].card;
   }
-  const winningCards = ranked.filter(x => x.wins).sort((a, b) =>
+  const winningCards = ranked.filter(item => item.wins).sort((a, b) =>
     a.points - b.points || a.rank - b.rank
   );
   if (winningCards.length) return winningCards[0].card;
   return ranked.sort((a, b) => a.points - b.points || a.rank - b.rank)[0].card;
 }
 
-/** Start the next deal after a completed round, preserving match score. */
 export function startNextRound(state) {
   if (state.phase !== "round_complete") throw new Error("The round is not ready for a new deal.");
   if (Math.max(...state.matchPoints) >= state.targetScore) throw new Error("The match is already complete.");

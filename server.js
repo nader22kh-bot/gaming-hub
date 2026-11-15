@@ -283,6 +283,9 @@ app.post('/api/baloot/shop', requireTelegramUser, async (req,res)=>{
  finally{client.release();}
 });
 
+const roomEventSubscribers = new Map();
+const roomStreamTokens = new Map();
+
 const roomCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function makeRoomCode() {
   return Array.from({ length: 6 }, () => roomCodeAlphabet[crypto.randomInt(roomCodeAlphabet.length)]).join("");
@@ -295,9 +298,43 @@ function roomError(res, error) {
 function roomView(state, viewerId) {
   if (state.phase === "lobby") return {
     phase: "lobby", code: state.code,
-    seats: state.seats.map(p => p ? { name:p.name, seat:p.seat, ready:p.ready, isMe:p.userId===String(viewerId) } : null)
+    seats: state.seats.map(p => p ? {
+      name:p.name, seat:p.seat, ready:p.ready,
+      isMe:p.userId===String(viewerId), isHost:p.userId===String(state.hostId)
+    } : null)
   };
-  return { ...publicMatchState(state, viewerId), code: state.code };
+  return {
+    ...publicMatchState(state, viewerId),
+    code: state.code,
+    hostSeat: state.seats.findIndex(p => p.userId === String(state.hostId))
+  };
+}
+function notifyRoom(code, state) {
+  const subscribers = roomEventSubscribers.get(code);
+  if (!subscribers) return;
+  const stale = [];
+  for (const subscriber of subscribers) {
+    if (subscriber.res.destroyed || subscriber.res.writableEnded) {
+      stale.push(subscriber);
+      continue;
+    }
+    try {
+      subscriber.res.write("data: " + JSON.stringify(roomView(state, subscriber.userId)) + "\n\n");
+    } catch {
+      stale.push(subscriber);
+    }
+  }
+  for (const subscriber of stale) subscribers.delete(subscriber);
+  if (!subscribers.size) roomEventSubscribers.delete(code);
+}
+function issueRoomStreamToken(code, userId) {
+  const now = Date.now();
+  for (const [token, value] of roomStreamTokens) {
+    if (value.expiresAt <= now) roomStreamTokens.delete(token);
+  }
+  const token = crypto.randomBytes(24).toString("base64url");
+  roomStreamTokens.set(token, { code, userId, expiresAt: now + 5 * 60 * 1000 });
+  return token;
 }
 app.post('/api/baloot/rooms', requireTelegramUser, async (req,res)=>{
   const user=req.telegramUser, id=String(user.id);
@@ -314,6 +351,7 @@ app.post('/api/baloot/rooms', requireTelegramUser, async (req,res)=>{
     }
     if(!inserted) return res.status(503).json({error:"Could not create a private table. Try again."});
     const result=await pool.query("SELECT state FROM baloot_rooms WHERE room_code=$1",[code]);
+    notifyRoom(code,result.rows[0].state);
     res.status(201).json({room:roomView(result.rows[0].state,id)});
   } catch(e){console.error("Baloot room create failed",e);res.status(500).json({error:"Could not create a private table."});}
 });
@@ -325,13 +363,14 @@ app.post('/api/baloot/rooms/:code/join', requireTelegramUser, async (req,res)=>{
     const row=await client.query("SELECT state FROM baloot_rooms WHERE room_code=$1 FOR UPDATE",[code]);
     if(!row.rowCount) throw new Error("Room code not found.");
     const state=row.rows[0].state;
-    if(state.phase!=="lobby") throw new Error("This match has already started.");
     if(state.seats.some(p=>p?.userId===id)){await client.query("COMMIT");return res.json({room:roomView(state,id)});}
+    if(state.phase!=="lobby") throw new Error("This match has already started.");
     const seat=state.seats.findIndex(p=>p===null);
     if(seat<0) throw new Error("This table is full.");
     state.seats[seat]={userId:id,name:user.first_name||user.username||"Player",seat,ready:false};
     await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(state)]);
     await client.query("COMMIT");
+    notifyRoom(code,state);
     res.json({room:roomView(state,id)});
   }catch(e){await client.query("ROLLBACK");roomError(res,e);}
   finally{client.release();}
@@ -345,6 +384,63 @@ app.get('/api/baloot/rooms/:code', requireTelegramUser, async (req,res)=>{
     if(!state.seats.some(p=>p?.userId===id)) return res.status(403).json({error:"You are not seated at this private table."});
     res.json({room:roomView(state,id)});
   }catch(e){console.error("Baloot room load failed",e);res.status(500).json({error:"Could not load this table."});}
+});
+
+app.post('/api/baloot/rooms/:code/stream-token', requireTelegramUser, async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase(), id=String(req.telegramUser.id);
+  try {
+    const row=await pool.query("SELECT state FROM baloot_rooms WHERE room_code=$1",[code]);
+    if(!row.rowCount) return res.status(404).json({error:"Room code not found."});
+    if(!row.rows[0].state.seats.some(p=>p?.userId===id)) {
+      return res.status(403).json({error:"You are not seated at this private table."});
+    }
+    const token=issueRoomStreamToken(code,id);
+    res.json({token,expiresIn:300});
+  } catch(e) {
+    console.error("Baloot stream token failed",e);
+    res.status(500).json({error:"Could not connect to the live table."});
+  }
+});
+
+app.get('/api/baloot/rooms/:code/events', async (req,res)=>{
+  const code=String(req.params.code||"").toUpperCase();
+  const token=String(req.query.token||"");
+  const ticket=roomStreamTokens.get(token);
+  if(!ticket || ticket.code!==code || ticket.expiresAt<=Date.now()) {
+    roomStreamTokens.delete(token);
+    return res.status(401).end();
+  }
+  try {
+    const row=await pool.query("SELECT state FROM baloot_rooms WHERE room_code=$1",[code]);
+    if(!row.rowCount || !row.rows[0].state.seats.some(p=>p?.userId===ticket.userId)) {
+      return res.status(403).end();
+    }
+    res.status(200);
+    res.set({
+      "Content-Type":"text/event-stream; charset=utf-8",
+      "Cache-Control":"no-cache, no-transform",
+      "Connection":"keep-alive",
+      "X-Accel-Buffering":"no"
+    });
+    res.flushHeaders?.();
+    const subscriber={userId:ticket.userId,res};
+    if(!roomEventSubscribers.has(code)) roomEventSubscribers.set(code,new Set());
+    roomEventSubscribers.get(code).add(subscriber);
+    res.write("data: " + JSON.stringify(roomView(row.rows[0].state,ticket.userId)) + "\n\n");
+    const heartbeat=setInterval(()=>{ if(!res.writableEnded) res.write(": ping\n\n"); },20000);
+    res.on("close",()=>{
+      clearInterval(heartbeat);
+      const subscribers=roomEventSubscribers.get(code);
+      if(subscribers) {
+        subscribers.delete(subscriber);
+        if(!subscribers.size) roomEventSubscribers.delete(code);
+      }
+    });
+  } catch(e) {
+    console.error("Baloot live stream failed",e);
+    if(!res.headersSent) res.status(500).end();
+    else res.end();
+  }
 });
 app.post('/api/baloot/rooms/:code/ready', requireTelegramUser, async (req,res)=>{
   const code=String(req.params.code||"").toUpperCase(), id=String(req.telegramUser.id);
@@ -364,6 +460,7 @@ app.post('/api/baloot/rooms/:code/ready', requireTelegramUser, async (req,res)=>
     }
     await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(state)]);
     await client.query("COMMIT");
+    notifyRoom(code,state);
     res.json({room:roomView(state,id)});
   }catch(e){await client.query("ROLLBACK");roomError(res,e);}
   finally{client.release();}
@@ -383,6 +480,7 @@ app.post('/api/baloot/rooms/:code/action', requireTelegramUser, async (req,res)=
       await client.query("UPDATE baloot_rooms SET state=$2::jsonb,updated_at=NOW() WHERE room_code=$1",[code,JSON.stringify(result.state)]);
     }
     await client.query("COMMIT");
+    if(!result.duplicate) notifyRoom(code,result.state);
     res.json({room:roomView(result.state,id),duplicate:result.duplicate,event:result.event});
   }catch(e){await client.query("ROLLBACK");roomError(res,e);}
   finally{client.release();}
