@@ -277,6 +277,24 @@ function finishSunRound(initialPoints = [0,0]) {
   return state;
 }
 
+test("a player may declare projects on their turn after the first player has played", () => {
+  let state=createMatch(players(),()=>0.42);
+  const deck=makeDeck(()=>0.22);
+  const hands=dealHands(deck);
+  state.phase="playing";
+  state.faceUp=null; state.stock=[];
+  state.contract={type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.buyerSeat=1;
+  state.seats.forEach((player,seat)=>{player.hand=hands[seat];});
+  state.projectCandidatesBySeat=state.seats.map((player,seat)=>detectProjects(player.hand,state.contract,seat));
+  const first=legalCards(state.seats[1].hand,[],state.contract,1)[0];
+  state=applyMatchAction(state,"2",{type:"play",card:cardKey(first)},"project-first-card").state;
+  const declared=applyMatchAction(state,"3",{type:"declare_projects"},"project-second-seat-declare");
+  assert.equal(declared.event.type,"projects_declared");
+  assert.equal(declared.state.projectsDeclaredBySeat[2],true);
+  assert.equal(declared.state.seats[2].hand.length,8);
+});
+
 test("project declarations are server-verified, one per seat, and scored into the match", () => {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
