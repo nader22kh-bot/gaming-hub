@@ -170,7 +170,7 @@
         ${t("Match score","نتيجة الصكة")}: ${(result.matchPoints||room.matchPoints||[0,0]).join(" — ")}
       </div>${host?`<button class="game-action" id="multiNext">${t("Deal next hand","وزّع اليد التالية")}</button>`:`<p class="muted">${t("Waiting for the host to deal again…","بانتظار صاحب الطاولة لبدء اليد التالية…")}</p>`}`;
     }else if(room.phase==="match_complete"){
-      const winner=(room.matchPoints||[0,0]).indexOf(Math.max(...(room.matchPoints||[0,0])));
+      const winner=Number.isInteger(room.matchWinnerTeam)?room.matchWinnerTeam:(room.matchPoints||[0,0]).indexOf(Math.max(...(room.matchPoints||[0,0])));
       controls=`<div class="baloot-reward">🏆 ${t("Match complete","انتهت الصكة")}<br>
         ${t("Winning team","الفريق الفائز")} ${winner===0?"A":"B"}<br>
         ${t("Final score","النتيجة النهائية")}: ${matchScore}
