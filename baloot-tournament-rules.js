@@ -93,7 +93,7 @@ export function createDoublingState(contract, matchPoints = [0,0]) {
     buyerSeat: contract.buyerSeat ?? contract.bidderSeat,
     buyerTeam: contract.team,
     doublerSeat: null,
-    nextActor: null,
+    nextActor: (Number(contract.buyerSeat ?? contract.bidderSeat) + 1) % 4,
     matchPoints: [...matchPoints]
   };
 }
@@ -107,8 +107,9 @@ export function applyDoublingAction(state, seat, action) {
   const next = structuredClone(state);
 
   if (kind === "double") {
+    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
     if (next.level !== "normal" || buyerSide) throw new Error("Only the opposing team may double first.");
-    if (action.locked && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
+    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
     if (next.contractType === "sun" &&
         !(next.matchPoints[buyerTeam] <= 100 && next.matchPoints[1-buyerTeam] > 100)) {
       throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
@@ -117,12 +118,16 @@ export function applyDoublingAction(state, seat, action) {
     next.locked = Boolean(action.locked); next.nextActor = buyer;
   } else if (kind === "three") {
     if (next.level !== "double" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may answer a double with three.");
+    if (next.contractType !== "hokom") throw new Error("Three is available only in Hokom.");
     next.multiplier = 3; next.level = "three"; next.locked = false; next.nextActor = next.doublerSeat;
   } else if (kind === "four") {
     if (next.level !== "three" || buyerSide || seat !== next.doublerSeat) throw new Error("Only the original doubler may answer three with four.");
+    if (next.contractType !== "hokom") throw new Error("Four is available only in Hokom.");
+    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
     next.multiplier = 4; next.level = "four"; next.locked = Boolean(action.locked); next.nextActor = buyer;
   } else if (kind === "gahwa") {
     if (next.level !== "four" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may call Gahwa after four.");
+    if (next.contractType !== "hokom") throw new Error("Gahwa is available only in Hokom.");
     next.level = "gahwa"; next.final = true; next.multiplier = 0; next.locked = false; next.nextActor = null;
   } else if (kind === "accept") {
     if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
