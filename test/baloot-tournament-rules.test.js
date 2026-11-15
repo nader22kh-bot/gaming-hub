@@ -1,183 +1,141 @@
-// Saudi tournament Baloot rule helpers, based on the General Baloot Regulations
-// published by the Saudi Entertainment Authority / Saudi Mind Sports Federation.
-// These helpers are deliberately pure: the server must call them inside the same
-// transaction that persists the match state.
-import { SUITS, RANKS, teamOf } from "./baloot-engine.js";
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  detectProjects, compareProjects, settleProjects, createDoublingState,
+  applyDoublingAction, openRuleCall, resolveRuleCall,
+  projectDeclarationWindow, validateAkkaClaim
+} from "../baloot-tournament-rules.js";
 
-const SEQUENCE = ["A", "K", "Q", "J", "10", "9", "8", "7"];
-const KIND_ORDER = ["A", "K", "Q", "J", "10"];
-const PROJECT_POINTS = {
-  hokom: { sira: 2, fifty: 5, hundred: 10, baloot: 2, fourHundred: 0 },
-  sun: { sira: 4, fifty: 10, hundred: 20, baloot: 0, fourHundred: 40 }
+const card = (suit, rank) => ({suit,rank});
+const padded = cards => {
+  const hand = [...cards];
+  const used = new Set(hand.map(item => item.suit + ":" + item.rank));
+  for (const suit of ["D","C","H","S"]) {
+    for (const rank of ["7","8","9","J","Q","K","10","A"]) {
+      const key = suit + ":" + rank;
+      if (!used.has(key) && hand.length < 8) {
+        hand.push(card(suit, rank));
+        used.add(key);
+      }
+    }
+  }
+  return hand;
 };
 
-export function detectProjects(hand, contract, seat = 0) {
-  if (!Array.isArray(hand) || hand.length !== 8) throw new Error("Projects require a complete eight-card hand.");
-  if (!contract || !["sun", "hokom"].includes(contract.type)) throw new Error("A valid contract is required.");
-  const projects = [];
-  for (const suit of SUITS) {
-    const cards = hand.filter(card => card.suit === suit);
-    const indexes = cards.map(card => SEQUENCE.indexOf(card.rank)).filter(index => index >= 0).sort((a,b)=>a-b);
-    let run = [];
-    for (const index of indexes) {
-      if (run.length && index !== run[run.length - 1] + 1) {
-        addSequenceProject(projects, run.length, suit, seat, contract.type);
-        run = [];
-      }
-      run.push(index);
-    }
-    addSequenceProject(projects, run.length, suit, seat, contract.type);
-  }
+test("detects Sira, Fifty and Hundred sequences with Saudi Sun/Hokom values", () => {
+  const sun = detectProjects(padded([card("S","A"),card("S","K"),card("S","Q"),card("S","J"),card("S","10")]),{type:"sun"},0);
+  assert.ok(sun.some(p=>p.type==="hundred"&&p.value===20&&p.length===5));
+  const hokom = detectProjects(padded([card("S","A"),card("S","K"),card("S","Q"),card("S","J")]),{type:"hokom",trumpSuit:"H"},1);
+  assert.ok(hokom.some(p=>p.type==="fifty"&&p.value===5));
+  const sira = detectProjects(padded([card("S","A"),card("S","K"),card("S","Q")]),{type:"sun"},2);
+  assert.ok(sira.some(p=>p.type==="sira"&&p.value===4));
+});
 
-  const counts = new Map();
-  for (const card of hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
-  for (const rank of KIND_ORDER) {
-    if (counts.get(rank) === 4) {
-      if (rank === "A" && contract.type === "sun") {
-        projects.push({ type: "fourHundred", value: 40, rawValue: 200, rank, seat, priority: 500 });
-      } else {
-        projects.push({ type: "hundred", subtype: "kind", value: 10, rank, seat,
-          priority: 300 + (KIND_ORDER.length - 1 - KIND_ORDER.indexOf(rank)) });
-      }
-    }
-  }
+test("detects four Aces as 400 in Sun, but not as a 400 project in Hokom", () => {
+  const hand = padded(["S","H","D","C"].map(s=>card(s,"A")));
+  assert.ok(detectProjects(hand,{type:"sun"},0).some(p=>p.type==="fourHundred"&&p.value===40&&p.rawValue===200));
+  assert.ok(!detectProjects(hand,{type:"hokom",trumpSuit:"S"},0).some(p=>p.type==="fourHundred"));
+});
 
-  if (contract.type === "hokom") {
-    const trump = hand.filter(card => card.suit === contract.trumpSuit);
-    if (trump.some(card => card.rank === "K") && trump.some(card => card.rank === "Q")) {
-      projects.push({ type: "baloot", value: 2, rawValue: 20, seat, priority: 100 });
-    }
-  }
-  return projects.sort((a,b)=>b.priority-a.priority);
-}
+test("detects Hokom Baloot only with trump King and Queen", () => {
+  const hand = padded([card("S","K"),card("S","Q")]);
+  assert.ok(detectProjects(hand,{type:"hokom",trumpSuit:"S"},0).some(p=>p.type==="baloot"&&p.value===2&&p.rawValue===20));
+  assert.ok(!detectProjects(hand,{type:"sun"},0).some(p=>p.type==="baloot"));
+});
 
-function addSequenceProject(out, length, suit, seat, contractType) {
-  if (length < 3) return;
-  const type = length >= 5 ? "hundred" : length === 4 ? "fifty" : "sira";
-  out.push({ type, subtype: "sequence", length, suit, seat,
-    value: PROJECT_POINTS[contractType][type],
-    priority: type === "hundred" ? 400 : type === "fifty" ? 200 : 150 });
-}
+test("Hundred sequence outranks same-value four-of-a-kind and four Aces is top Sun project", () => {
+  const sequence={type:"hundred",subtype:"sequence",value:20,priority:400,seat:1};
+  const kind={type:"hundred",subtype:"kind",value:10,priority:300,seat:0};
+  assert.ok(compareProjects(sequence,kind,0)<0);
+  const fourHundred={type:"fourHundred",value:40,priority:500,seat:3};
+  assert.ok(compareProjects(fourHundred,sequence,0)<0);
+});
 
-export function compareProjects(a, b, dealer) {
-  if (a.priority !== b.priority) return b.priority - a.priority;
-  const aDistance = (a.seat - ((dealer + 1) % 4) + 4) % 4;
-  const bDistance = (b.seat - ((dealer + 1) % 4) + 4) % 4;
-  if (aDistance !== bDistance) return aDistance - bDistance;
-  return 0;
-}
+test("equal projects are awarded by seat order from dealer's right", () => {
+  const first={type:"sira",priority:150,value:4,rawValue:20,seat:1};
+  const second={type:"sira",priority:150,value:4,rawValue:20,seat:3};
+  assert.ok(compareProjects(first,second,0)<0);
+});
 
-export function settleProjects(projectsBySeat, contract, dealer, multiplier = 1) {
-  const all = projectsBySeat.flat().filter(Boolean);
-  const ordinary = all.filter(project => project.type !== "baloot");
-  const baloots = all.filter(project => project.type === "baloot");
-  const ordered = [...ordinary].sort((a,b)=>compareProjects(a,b,dealer));
-  const winner = ordered[0] || null;
-  const winningTeam = winner ? teamOf(winner.seat) : null;
-  const awarded = [0,0];
-  const rawAwarded = [0,0];
-  if (winner) {
-    for (const project of ordinary.filter(item => teamOf(item.seat) === winningTeam)) {
-      awarded[winningTeam] += project.value * (multiplier === 2 ? 2 : 1);
-      rawAwarded[winningTeam] += project.rawValue ?? 0;
-    }
-  }
-  // Baloot is independent of ordinary project priority and always stays two points.
-  for (const project of baloots) {
-    const team = teamOf(project.seat);
-    awarded[team] += 2;
-    rawAwarded[team] += project.rawValue ?? 20;
-  }
-  return { winningTeam, awarded, rawAwarded, winningProject: winner, projects: all };
-}
+test("only winning team's projects count, and only double doubles project points", () => {
+  const bySeat=[
+    [{type:"sira",seat:0,value:4,priority:150}],
+    [{type:"hundred",seat:1,value:20,priority:400}],
+    [{type:"fifty",seat:2,value:10,priority:200}],
+    []
+  ];
+  const doubled=settleProjects(bySeat,{type:"sun"},0,2);
+  assert.equal(doubled.winningTeam,1);
+  assert.deepEqual(doubled.awarded,[0,40]);\n  assert.deepEqual(doubled.rawAwarded,[0,100]);
+  const tripled=settleProjects(bySeat,{type:"sun"},0,3);
+  assert.deepEqual(tripled.awarded,[0,20]);
+});
 
-export function createDoublingState(contract, matchPoints = [0,0]) {
-  if (!contract || !["sun","hokom"].includes(contract.type)) throw new Error("A valid contract is required.");
-  return {
-    multiplier: 1, level: "normal", locked: false, final: false,
-    contractType: contract.type,
-    buyerSeat: contract.buyerSeat ?? contract.bidderSeat,
-    buyerTeam: contract.team,
-    doublerSeat: null,
-    nextActor: (Number(contract.buyerSeat ?? contract.bidderSeat) + 1) % 4,
-    matchPoints: [...matchPoints]
-  };
-}
+test("Baloot is independent of project priority and never doubles", () => {
+  const bySeat=[
+    [{type:"hundred",seat:0,value:20,rawValue:100,priority:400},{type:"baloot",seat:0,value:2,rawValue:20,priority:100}],
+    [],[],[]
+  ];
+  const doubled=settleProjects(bySeat,{type:"hokom"},0,2);
+  assert.deepEqual(doubled.awarded,[42,0]);
+  assert.deepEqual(doubled.rawAwarded,[120,0]);
+});
 
-export function applyDoublingAction(state, seat, action) {
-  if (state.final) throw new Error("The doubling decision is already final.");
-  const buyer = state.buyerSeat;
-  const buyerTeam = state.buyerTeam;
-  const buyerSide = teamOf(seat) === buyerTeam;
-  const kind = action?.type;
-  const next = structuredClone(state);
+test("Hokom doubling follows Double → Three → Four → Gahwa with buyer/doubler turns", () => {
+  let state=createDoublingState({type:"hokom",buyerSeat:0,team:0});
+  state=applyDoublingAction(state,1,{type:"double",locked:true});
+  assert.equal(state.multiplier,2);
+  assert.equal(state.locked,true);
+  state=applyDoublingAction(state,0,{type:"three"});
+  assert.equal(state.multiplier,3);
+  state=applyDoublingAction(state,1,{type:"four",locked:false});
+  assert.equal(state.multiplier,4);
+  state=applyDoublingAction(state,0,{type:"gahwa"});
+  assert.equal(state.level,"gahwa");
+  assert.equal(state.final,true);
+});
 
-  if (kind === "double") {
-    if (next.level !== "normal" || buyerSide) throw new Error("Only the opposing team may double first.");
-    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
-    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
-    if (next.contractType === "sun" &&
-        !(next.matchPoints[buyerTeam] <= 100 && next.matchPoints[1-buyerTeam] > 100)) {
-      throw new Error("Sun may be doubled only when the buyer team has 100 or fewer and opponents exceed 100.");
-    }
-    next.multiplier = 2; next.level = "double"; next.doublerSeat = seat;
-    next.locked = Boolean(action.locked); next.nextActor = buyer;
-  } else if (kind === "three") {
-    if (next.level !== "double" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may answer a double with three.");
-    if (next.contractType !== "hokom") throw new Error("Three is available only in Hokom.");
-    next.multiplier = 3; next.level = "three"; next.locked = false; next.nextActor = next.doublerSeat;
-  } else if (kind === "four") {
-    if (next.level !== "three" || buyerSide || seat !== next.doublerSeat) throw new Error("Only the original doubler may answer three with four.");
-    if (next.contractType !== "hokom") throw new Error("Four is available only in Hokom.");
-    if (action.locked !== undefined && typeof action.locked !== "boolean") throw new Error("Invalid lock choice.");
-    next.multiplier = 4; next.level = "four"; next.locked = Boolean(action.locked); next.nextActor = buyer;
-  } else if (kind === "gahwa") {
-    if (next.level !== "four" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may call Gahwa after four.");
-    if (next.contractType !== "hokom") throw new Error("Gahwa is available only in Hokom.");
-    next.level = "gahwa"; next.final = true; next.locked = false; next.nextActor = null;
-  } else if (kind === "accept") {
-    if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
-    next.final = true; next.nextActor = null;
-  } else {
-    throw new Error("Unknown doubling action.");
-  }
-  return next;
-}
+test("only the two opposing principals may raise; out-of-turn multiplier actions fail", () => {
+  let state=createDoublingState({type:"hokom",buyerSeat:0,team:0});
+  assert.throws(()=>applyDoublingAction(state,0,{type:"double"}),/opposing/);
+  state=applyDoublingAction(state,1,{type:"double"});
+  assert.throws(()=>applyDoublingAction(state,2,{type:"three"}),/buyer/);
+  assert.throws(()=>applyDoublingAction(state,3,{type:"accept"}),/turn/);
+});
 
-// The published tournament rules identify false Akka/Sawa and unsuccessful Qayd
-// as violations, but do not fully formalize an online adjudication algorithm.
-// Keep claims pending for server-side evidence or a human table moderator;
-// never let a client award points or force a redeal.
-export function openRuleCall(state, seat, kind, details = {}) {
-  if (!["akka","sawa","qayd","takyid","takweesh"].includes(kind)) throw new Error("Unsupported rule call.");
-  if (state.pendingRuleCall) throw new Error("A rule call is already pending.");
-  return { ...structuredClone(state), pendingRuleCall: {
-    id: details.id || null, kind, callerSeat: seat,
-    targetSeat: Number.isInteger(details.targetSeat) ? details.targetSeat : null,
-    evidence: details.evidence || null, status: "pending"
-  }};
-}
+test("Sun Double is restricted to buyer team at 100 or less and opponents above 100", () => {
+  const allowed=createDoublingState({type:"sun",buyerSeat:0,team:0},[90,110]);
+  assert.equal(applyDoublingAction(allowed,1,{type:"double"}).multiplier,2);
+  const blocked=createDoublingState({type:"sun",buyerSeat:0,team:0},[101,110]);
+  assert.throws(()=>applyDoublingAction(blocked,1,{type:"double"}),/100/);
+});
 
-export function resolveRuleCall(state, ruling) {
-  const call = state.pendingRuleCall;
-  if (!call || call.status !== "pending") throw new Error("There is no pending rule call.");
-  if (!["upheld","rejected","warning","redeal"].includes(ruling?.decision)) throw new Error("A valid table ruling is required.");
-  const next = structuredClone(state);
-  next.pendingRuleCall.status = ruling.decision;
-  next.pendingRuleCall.ruling = String(ruling.note || "").slice(0,300);
-  next.pendingRuleCall.ruledBy = ruling.refereeId || "table-moderator";
-  return next;
-}
+test("Gahwa is unavailable before Four and no actions follow a final decision", () => {
+  const state=createDoublingState({type:"hokom",buyerSeat:0,team:0});
+  assert.throws(()=>applyDoublingAction(state,0,{type:"gahwa"}),/Unknown|buyer/);
+  let final=applyDoublingAction(state,1,{type:"double"});
+  final=applyDoublingAction(final,0,{type:"accept"});
+  assert.throws(()=>applyDoublingAction(final,0,{type:"three"}),/final/);
+});
 
-export function projectDeclarationWindow(state) {
-  return state.phase === "playing" && state.tricks.length === 0 &&
-    state.trick.length < 4 && state.declarationsClosed !== true;
-}
+test("Qayd/Sawa/Akka calls remain pending until a server-side ruling is recorded", () => {
+  const state={phase:"playing",tricks:[],trick:[]};
+  const pending=openRuleCall(state,2,"qayd",{targetSeat:1,id:"q-1"});
+  assert.equal(pending.pendingRuleCall.status,"pending");
+  assert.throws(()=>openRuleCall(pending,0,"sawa"),/already pending/);
+  const ruled=resolveRuleCall(pending,{decision:"upheld",note:"Confirmed from action history",refereeId:"host"});
+  assert.equal(ruled.pendingRuleCall.status,"upheld");
+  assert.throws(()=>resolveRuleCall(ruled,{decision:"rejected"}),/no pending/);
+});
 
-export function validateAkkaClaim(card, remainingCardsOfSuit) {
-  if (!card || !Array.isArray(remainingCardsOfSuit)) return false;
-  const rank = SEQUENCE.indexOf(card.rank);
-  if (rank < 0) return false;
-  return remainingCardsOfSuit.every(other => other.suit !== card.suit ||
-    SEQUENCE.indexOf(other.rank) >= rank);
-}
+test("project declarations are allowed only during the first trick", () => {
+  assert.equal(projectDeclarationWindow({phase:"playing",tricks:[],trick:[]}),true);
+  assert.equal(projectDeclarationWindow({phase:"playing",tricks:[{}],trick:[]}),false);
+  assert.equal(projectDeclarationWindow({phase:"round_complete",tricks:[],trick:[]}),false);
+});
+
+test("Akka claim is valid only when no higher unplayed card remains in that suit", () => {
+  const claim=card("S","A");
+  assert.equal(validateAkkaClaim(claim,[claim,card("S","K"),card("H","7")]),true);
+  assert.equal(validateAkkaClaim(card("S","K"),[card("S","K"),card("S","A")]),false);
+});
