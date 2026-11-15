@@ -319,6 +319,11 @@ function applyBid(next, seat, action) {
 
   if (bid === "sun") {
     if (next.contract?.type === "hokom") {
+      // KSA tournament rule: when the exposed card is an Ace, only the
+      // player to the dealer's right may convert Hokom to Sun.
+      if (next.faceUp?.rank === "A" && seat !== advanceSeat(next.dealer)) {
+        throw new Error("With an Ace up-card, only the player to the dealer's right may overcall Hokom with Sun.");
+      }
       if (next.bidRound === 2 && !(next.sunOvercallEligible || []).includes(seat)) {
         throw new Error("Only a player who has not spoken in the second round may overcall with Sun.");
       }
