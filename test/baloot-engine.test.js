@@ -368,9 +368,9 @@ test("live Hokom double can interrupt play and resumes the exact pending turn", 
   state.phase="playing";
   state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
   state.buyerSeat=1; state.currentSeat=2; state.hostId="1";
-  const called=applyMatchAction(state,"4",{type:"call_live_double",locked:true},"live-double").state;
+  const called=applyMatchAction(state,"3",{type:"call_live_double",locked:true},"live-double").state;
   assert.equal(called.phase,"doubling");
-  assert.equal(called.doubling.doublerSeat,3);
+  assert.equal(called.doubling.doublerSeat,2);
   assert.equal(called.currentSeat,1);
   const accepted=applyMatchAction(called,"2",{type:"accept"},"live-double-accept").state;
   assert.equal(accepted.phase,"playing");
