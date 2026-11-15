@@ -52,6 +52,44 @@ test("first-round Hokom is tied to the up-card suit and Sun may overcall it", ()
   assert.equal(new Set(all.map(cardKey)).size, 32);
 });
 
+test("a first-round Sun by the first bidder completes immediately", () => {
+  const match = act(createMatch(players(), () => 0.4), 1, {type:"sun"}, "sun-first").state;
+  assert.equal(match.phase, "playing");
+  assert.equal(match.contract.bidderSeat, 1);
+});
+
+test("a player who passed earlier may take Sun from a later first-round bidder", () => {
+  let match = createMatch(players(), () => 0.4);
+  match = act(match, 1, {type:"pass"}, "prior-pass").state;
+  match = act(match, 2, {type:"sun"}, "later-sun").state;
+  assert.deepEqual(match.sunOvercallEligible,[1]);
+  match = act(match, 3, {type:"pass"}, "later-pass-3").state;
+  match = act(match, 0, {type:"pass"}, "later-pass-0").state;
+  match = act(match, 1, {type:"sun"}, "earlier-sun").state;
+  assert.equal(match.phase,"playing");
+  assert.equal(match.contract.bidderSeat,1);
+});
+
+test("second-round Sun ends the auction immediately", () => {
+  let match = createMatch(players(), () => 0.4);
+  for (let i=0;i<4;i++) match = act(match,match.currentSeat,{type:"pass"},"sun-second-pass-"+i).state;
+  match = act(match,1,{type:"sun"},"sun-second").state;
+  assert.equal(match.phase,"playing");
+  assert.equal(match.contract.type,"sun");
+});
+
+test("a later second-round player may overcall Hokom with Sun", () => {
+  let match = createMatch(players(), () => 0.4);
+  for (let i=0;i<4;i++) match = act(match,match.currentSeat,{type:"pass"},"hokom-second-pass-"+i).state;
+  const otherSuit = ["S","H","D","C"].find(suit=>suit!==match.faceUp.suit);
+  match = act(match,1,{type:"hokom",trumpSuit:otherSuit},"second-hokom-overcall").state;
+  assert.deepEqual(match.sunOvercallEligible,[2,3,0]);
+  match = act(match,2,{type:"sun"},"second-round-sun-overcall").state;
+  assert.equal(match.phase,"playing");
+  assert.equal(match.contract.type,"sun");
+  assert.equal(match.contract.bidderSeat,2);
+});
+
 test("four passes open the second auction round; second-round Hokom uses another suit", () => {
   let match = createMatch(players(), () => 0.35);
   for (let seat = 1; seat <= 4; seat++) {
@@ -126,14 +164,14 @@ test("Hokom requires an overtrump when an opponent trump is winning and a higher
   assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S"},3),hand.slice(0,2));
 });
 
-test("a player may discard when their partner is winning a non-trump trick", () => {
+test("KSA tournament Hokom requires a trump even when the partner is winning", () => {
   const hand = [{suit:"S",rank:"7"},{suit:"D",rank:"J"}];
   const trick = [
     {seat:0,card:{suit:"H",rank:"K"}},
     {seat:1,card:{suit:"H",rank:"A"}},
     {seat:2,card:{suit:"H",rank:"Q"}}
   ];
-  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S"},3),hand);
+  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S"},3),[hand[0]]);
 });
 
 test("a trump lead requires the highest available trump when possible", () => {
@@ -172,12 +210,12 @@ test("duplicate action ids do not apply twice", () => {
   assert.equal(second.state.bidHistory.length,1);
 });
 
-test("Sun and Hokom contract thresholds and game-point conversion are correct", () => {
+test("Sun and Hokom use the Saudi card-point rounding and tie-break rules", () => {
   assert.equal(contractTargetPoints("sun"),65);
   assert.equal(contractTargetPoints("hokom"),81);
   const sun = scoreRound([66,64],{type:"sun",team:0});
   assert.equal(sun.made,true);
-  assert.deepEqual(sun.gamePoints,[13,13]);
+  assert.deepEqual(sun.gamePoints,[14,12]);
   assert.equal(sun.totalGamePoints,26);
   const failedSun = scoreRound([64,66],{type:"sun",team:0});
   assert.equal(failedSun.made,false);
@@ -185,6 +223,15 @@ test("Sun and Hokom contract thresholds and game-point conversion are correct", 
   const hokom = scoreRound([82,80],{type:"hokom",team:0});
   assert.deepEqual(hokom.gamePoints,[8,8]);
   assert.equal(hokom.totalGamePoints,16);
+  const sunTie = scoreRound([65,65],{type:"sun",team:0});
+  assert.equal(sunTie.made,true);
+  assert.deepEqual(sunTie.gamePoints,[13,13]);
+  const hokomTie = scoreRound([81,81],{type:"hokom",team:0});
+  assert.equal(hokomTie.made,true);
+  assert.deepEqual(hokomTie.gamePoints,[8,8]);
+  const hokomFall = scoreRound([80,82],{type:"hokom",team:0});
+  assert.equal(hokomFall.made,false);
+  assert.deepEqual(hokomFall.gamePoints,[0,16]);
 });
 
 test("Kaboot scores 44 in Sun and 25 in Hokom", () => {
@@ -201,7 +248,7 @@ test("reconnecting player receives their hand but not opponents' cards", () => {
   assert.equal(view.currentSeat,match.currentSeat);
 });
 
-function finishSunRound() {
+function finishSunRound(initialPoints = [0,0]) {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
   const hands = dealHands(deck);
@@ -211,7 +258,7 @@ function finishSunRound() {
   state.contract = {type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
   state.buyerSeat = 1;
   state.hostId = "1";
-  state.matchPoints = [0,0];
+  state.matchPoints = [...initialPoints];
   state.targetScore = 152;
   state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
   state.currentSeat = 1;
@@ -260,4 +307,15 @@ test("startNextRound preserves the match score", () => {
   const next = startNextRound(state);
   assert.deepEqual(next.matchPoints,state.matchPoints);
   assert.equal(next.dealer,1);
+});
+
+test("a match tied at or above 152 continues for a deciding hand", () => {
+  const baseline = finishSunRound();
+  const start = baseline.roundResult.gamePoints.map(points=>152-points);
+  const tied = finishSunRound(start);
+  assert.deepEqual(tied.matchPoints,[152,152]);
+  assert.equal(tied.phase,"round_complete");
+  const next = startNextRound(tied);
+  assert.equal(next.phase,"bidding");
+  assert.deepEqual(next.matchPoints,[152,152]);
 });
