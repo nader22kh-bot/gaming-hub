@@ -60,7 +60,6 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
   const cardGamePoints = [0, 0];
   cardGamePoints[countingTeam] = countingGamePoints;
   cardGamePoints[contract.team] = contractGamePoints;
-  const remainder = countingRawPoints % 10;
   const kabootTeam = teamTricks[0] === 8 ? 0 : teamTricks[1] === 8 ? 1 : null;
   const gamePoints = [0, 0];
   let winningTeam;
