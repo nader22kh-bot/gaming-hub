@@ -211,7 +211,8 @@ export function createMatch(players, random = Math.random, options = {}) {
     declarationsClosed: false,
     projectResult: null,
     pendingRuleCall: null,
-    ruleCallHistory: []
+    ruleCallHistory: [],
+    akkaClaims: []
   };
 }
 
