@@ -21,7 +21,7 @@ export function detectProjects(hand, contract, seat = 0) {
     let run = [];
     for (const index of indexes) {
       if (run.length && index !== run[run.length - 1] + 1) {
-        addSequenceProject(projects, run.length, suit, seat, contract.type);
+        addSequenceProject(projects, run, suit, seat, contract.type);
         run = [];
       }
       run.push(index);
