@@ -208,6 +208,7 @@ export function createMatch(players, random = Math.random, options = {}) {
     hostId: options.hostId || null,
     lastActionAt: new Date().toISOString(),
     projectsBySeat: [null, null, null, null],
+    projectsDeclaredBySeat: [false, false, false, false],
     projectCandidatesBySeat: [null, null, null, null],
     declarationsClosed: false,
     projectResult: null
@@ -253,6 +254,7 @@ function completeAuction(state) {
   next.bidPasses = 0;
   next.sunOvercallEligible = [];
   next.projectsBySeat = [null, null, null, null];
+  next.projectsDeclaredBySeat = [false, false, false, false];
   next.projectCandidatesBySeat = next.seats.map((player, seat) => detectProjects(player.hand, next.contract, seat));
   next.declarationsClosed = false;
   next.projectResult = null;
@@ -434,6 +436,7 @@ export function applyMatchAction(state, userId, action, actionId) {
     if (action?.type === "pass") {
       if (seat === firstOpponent) {
         next.currentSeat = secondOpponent;
+        next.doubling.nextActor = secondOpponent;
         event = { type: "doubling_passed", seat };
       } else if (seat === secondOpponent && next.doubling?.level === "normal") {
         next.doubling.final = true;
@@ -467,9 +470,10 @@ export function applyMatchAction(state, userId, action, actionId) {
   } else if (next.phase === "playing") {
     if (action?.type === "declare_projects") {
       if (!projectDeclarationWindow(next)) throw new Error("The project declaration window is closed.");
-      if (next.projectsBySeat?.[seat] !== null) throw new Error("You have already declared your projects.");
+      if (next.projectsDeclaredBySeat?.[seat]) throw new Error("You have already declared your projects.");
       const projects = (next.projectCandidatesBySeat?.[seat] || []).filter(project => project.type !== "baloot");
-      next.projectsBySeat[seat] = projects;
+      next.projectsBySeat[seat] = [...(next.projectsBySeat?.[seat] || []), ...projects];
+      next.projectsDeclaredBySeat[seat] = true;
       event = { type: "projects_declared", seat, projects };
     } else if (action?.type !== "play") throw new Error("Declare projects or play one card.");
     if (action?.type === "play") {
@@ -499,7 +503,23 @@ export function applyMatchAction(state, userId, action, actionId) {
       if (next.tricks.length === 8) {
         next.declarationsClosed = true;
         const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
-        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, next.doubling?.multiplier || 1);
+        const multiplier = next.doubling?.multiplier || 1;
+        if (multiplier > 1) {
+          const rawTie = next.teamPoints[0] === next.teamPoints[1];
+          const winningTeam = rawTie ? next.contract.team : (next.teamPoints[0] > next.teamPoints[1] ? 0 : 1);
+          const doubledPoints = [0, 0];
+          const base = next.contract.type === "sun" ? 26 : 16;
+          doubledPoints[winningTeam] = result.kaboot
+            ? (next.contract.type === "sun" ? 44 : 25)
+            : base * multiplier;
+          result.winningTeam = winningTeam;
+          result.made = winningTeam === next.contract.team;
+          result.gamePoints = doubledPoints;
+          result.totalGamePoints = doubledPoints[0] + doubledPoints[1];
+          result.doubled = true;
+          result.multiplier = multiplier;
+        }
+        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, multiplier);
         result.projectPoints = [...projectResult.awarded];
         result.projectResult = projectResult;
         result.gamePoints = result.gamePoints.map((points, team) => points + projectResult.awarded[team]);
@@ -548,10 +568,10 @@ export function publicMatchState(state, viewerId) {
     matchPoints: state.matchPoints,
     roundResult: state.roundResult || null,
     projectDeclarations: (state.projectsBySeat || [null,null,null,null]).map((projects, seat) => ({
-      seat, declared: Array.isArray(projects), projects: Array.isArray(projects) && (state.tricks.length > 0 || state.phase === "round_complete" || state.phase === "match_complete") ? projects : undefined
+      seat, declared: Boolean(state.projectsDeclaredBySeat?.[seat]) || (Array.isArray(projects) && projects.some(project => project.type === "baloot")), projects: Array.isArray(projects) && (state.tricks.length > 0 || state.phase === "round_complete" || state.phase === "match_complete") ? projects : undefined
     })),
     projectWindowOpen: projectDeclarationWindow(state),
-    myProjectsDeclared: state.projectsBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))] !== null,
+    myProjectsDeclared: Boolean(state.projectsDeclaredBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))]),
     projectResult: state.projectResult || null,
     seats: state.seats.map(player => ({
       name: player.name,
