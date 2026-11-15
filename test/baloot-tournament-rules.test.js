@@ -51,6 +51,21 @@ test("Hundred sequence outranks same-value four-of-a-kind and four Aces is top S
   assert.ok(compareProjects(fourHundred,sequence,0)<0);
 });
 
+test("four-of-a-kind priority follows Aces, Kings, Queens, Jacks, Tens", () => {
+  const aceKind={type:"hundred",subtype:"kind",rank:"A",priority:304,seat:0};
+  const kingKind={type:"hundred",subtype:"kind",rank:"K",priority:303,seat:1};
+  assert.ok(compareProjects(aceKind,kingKind,0)<0);
+});
+
+test("Baloot stays at two points when other projects are doubled", () => {
+  const bySeat=[
+    [{type:"hundred",seat:0,value:20,priority:400},{type:"baloot",seat:0,value:2,priority:100}],
+    [],[],[]
+  ];
+  const doubled=settleProjects(bySeat,{type:"hokom"},0,2);
+  assert.deepEqual(doubled.awarded,[42,0]);
+});
+
 test("equal projects are awarded by seat order from dealer's right", () => {
   const first={type:"sira",priority:150,value:4,seat:1};
   const second={type:"sira",priority:150,value:4,seat:3};
