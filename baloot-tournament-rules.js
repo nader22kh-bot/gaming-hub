@@ -128,7 +128,7 @@ export function applyDoublingAction(state, seat, action) {
   } else if (kind === "gahwa") {
     if (next.level !== "four" || !buyerSide || seat !== buyer) throw new Error("Only the buyer may call Gahwa after four.");
     if (next.contractType !== "hokom") throw new Error("Gahwa is available only in Hokom.");
-    next.level = "gahwa"; next.final = true; next.multiplier = 0; next.locked = false; next.nextActor = null;
+    next.level = "gahwa"; next.final = true; next.locked = false; next.nextActor = null;
   } else if (kind === "accept") {
     if (next.nextActor !== seat) throw new Error("It is not your doubling turn.");
     next.final = true; next.nextActor = null;
