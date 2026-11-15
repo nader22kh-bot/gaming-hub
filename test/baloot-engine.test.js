@@ -252,14 +252,14 @@ test("reconnecting player receives their hand but not opponents' cards", () => {
   assert.equal(view.currentSeat,match.currentSeat);
 });
 
-function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false) {
+function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false, contractType = "sun") {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
   const hands = dealHands(deck);
   state.phase = "playing";
   state.faceUp = null;
   state.stock = [];
-  state.contract = {type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.contract = {type:contractType,bidderSeat:1,team:1,trumpSuit:contractType==="hokom"?"S":null,ashkal:false};
   state.buyerSeat = 1;
   state.hostId = "1";
   state.matchPoints = [...initialPoints];
@@ -379,7 +379,7 @@ test("live Hokom double can interrupt play and resumes the exact pending turn", 
 });
 
 test("Gahwa awards the match to the hand winner even below 152", () => {
-  const finished=finishSunRound([0,0],4,true);
+  const finished=finishSunRound([0,0],4,true,"hokom");
   assert.equal(finished.phase,"match_complete");
   assert.equal(finished.roundResult.gahwa,true);
   assert.equal(finished.matchWinnerTeam,finished.roundResult.winningTeam);
