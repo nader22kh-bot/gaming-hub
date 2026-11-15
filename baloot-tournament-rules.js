@@ -34,7 +34,7 @@ export function detectProjects(hand, contract, seat = 0) {
   for (const rank of KIND_ORDER) {
     if (counts.get(rank) === 4) {
       if (rank === "A" && contract.type === "sun") {
-        projects.push({ type: "fourHundred", value: 40, rank, seat, priority: 500 });
+        projects.push({ type: "fourHundred", value: 40, rawValue: 200, rank, seat, priority: 500 });
       } else {
         projects.push({ type: "hundred", subtype: "kind", value: 10, rank, seat,
           priority: 300 + (KIND_ORDER.length - 1 - KIND_ORDER.indexOf(rank)) });
@@ -45,7 +45,7 @@ export function detectProjects(hand, contract, seat = 0) {
   if (contract.type === "hokom") {
     const trump = hand.filter(card => card.suit === contract.trumpSuit);
     if (trump.some(card => card.rank === "K") && trump.some(card => card.rank === "Q")) {
-      projects.push({ type: "baloot", value: 2, seat, priority: 100 });
+      projects.push({ type: "baloot", value: 2, rawValue: 20, seat, priority: 100 });
     }
   }
   return projects.sort((a,b)=>b.priority-a.priority);
@@ -69,20 +69,26 @@ export function compareProjects(a, b, dealer) {
 
 export function settleProjects(projectsBySeat, contract, dealer, multiplier = 1) {
   const all = projectsBySeat.flat().filter(Boolean);
-  if (!all.length) return { winningTeam: null, awarded: [0,0], winningProject: null };
-  const ordered = [...all].sort((a,b)=>compareProjects(a,b,dealer));
-  const winner = ordered[0];
-  const winningTeam = teamOf(winner.seat);
-  const winningTeamProjects = all.filter(project => teamOf(project.seat) === winningTeam);
-  // Baloot remains two points even when the hand is doubled. Other projects
-  // are doubled only at x2; Three and Four never multiply project points.
-  const raw = winningTeamProjects.reduce((sum, project) => sum + project.value, 0);
-  const doubledBonus = multiplier === 2
-    ? winningTeamProjects.reduce((sum, project) => sum + (project.type === "baloot" ? 0 : project.value), 0)
-    : 0;
+  const ordinary = all.filter(project => project.type !== "baloot");
+  const baloots = all.filter(project => project.type === "baloot");
+  const ordered = [...ordinary].sort((a,b)=>compareProjects(a,b,dealer));
+  const winner = ordered[0] || null;
+  const winningTeam = winner ? teamOf(winner.seat) : null;
   const awarded = [0,0];
-  awarded[winningTeam] = raw + doubledBonus;
-  return { winningTeam, awarded, winningProject: winner, projects: all };
+  const rawAwarded = [0,0];
+  if (winner) {
+    for (const project of ordinary.filter(item => teamOf(item.seat) === winningTeam)) {
+      awarded[winningTeam] += project.value * (multiplier === 2 ? 2 : 1);
+      rawAwarded[winningTeam] += project.rawValue ?? 0;
+    }
+  }
+  // Baloot is independent of ordinary project priority and always stays two points.
+  for (const project of baloots) {
+    const team = teamOf(project.seat);
+    awarded[team] += 2;
+    rawAwarded[team] += project.rawValue ?? 20;
+  }
+  return { winningTeam, awarded, rawAwarded, winningProject: winner, projects: all };
 }
 
 export function createDoublingState(contract, matchPoints = [0,0]) {
