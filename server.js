@@ -319,7 +319,7 @@ function notifyRoom(code, state) {
       continue;
     }
     try {
-      subscriber.res.write("data: " + JSON.stringify(roomView(state, subscriber.userId)) + "\\n\\n");
+      subscriber.res.write("data: " + JSON.stringify(roomView(state, subscriber.userId)) + "\n\n");
     } catch {
       stale.push(subscriber);
     }
@@ -426,9 +426,9 @@ app.get('/api/baloot/rooms/:code/events', async (req,res)=>{
     const subscriber={userId:ticket.userId,res};
     if(!roomEventSubscribers.has(code)) roomEventSubscribers.set(code,new Set());
     roomEventSubscribers.get(code).add(subscriber);
-    res.write("data: " + JSON.stringify(roomView(row.rows[0].state,ticket.userId)) + "\\n\\n");
-    const heartbeat=setInterval(()=>{ if(!res.writableEnded) res.write(": ping\\n\\n"); },20000);
-    req.on("close",()=>{
+    res.write("data: " + JSON.stringify(roomView(row.rows[0].state,ticket.userId)) + "\n\n");
+    const heartbeat=setInterval(()=>{ if(!res.writableEnded) res.write(": ping\n\n"); },20000);
+    res.on("close",()=>{
       clearInterval(heartbeat);
       const subscribers=roomEventSubscribers.get(code);
       if(subscribers) {
