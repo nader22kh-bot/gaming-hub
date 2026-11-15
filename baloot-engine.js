@@ -204,6 +204,7 @@ export function createMatch(players, random = Math.random, options = {}) {
     hostId: options.hostId || null,
     lastActionAt: new Date().toISOString(),
     projectsBySeat: [null, null, null, null],
+    projectCandidatesBySeat: [null, null, null, null],
     declarationsClosed: false,
     projectResult: null
   };
@@ -248,6 +249,7 @@ function completeAuction(state) {
   next.sunOvercallEligible = [];
   next.phase = "playing";
   next.projectsBySeat = [null, null, null, null];
+  next.projectCandidatesBySeat = next.seats.map((player, seat) => detectProjects(player.hand, next.contract, seat));
   next.declarationsClosed = false;
   next.projectResult = null;
   next.currentSeat = advanceSeat(next.dealer);
@@ -421,7 +423,7 @@ export function applyMatchAction(state, userId, action, actionId) {
     if (action?.type === "declare_projects") {
       if (!projectDeclarationWindow(next)) throw new Error("The project declaration window is closed.");
       if (next.projectsBySeat?.[seat] !== null) throw new Error("You have already declared your projects.");
-      const projects = detectProjects(next.seats[seat].hand, next.contract, seat);
+      const projects = (next.projectCandidatesBySeat?.[seat] || []).filter(project => project.type !== "baloot");
       next.projectsBySeat[seat] = projects;
       event = { type: "projects_declared", seat, projects };
     } else if (action?.type !== "play") throw new Error("Declare projects or play one card.");
@@ -497,7 +499,7 @@ export function publicMatchState(state, viewerId) {
     matchPoints: state.matchPoints,
     roundResult: state.roundResult || null,
     projectDeclarations: (state.projectsBySeat || [null,null,null,null]).map((projects, seat) => ({
-      seat, declared: Array.isArray(projects), projects: Array.isArray(projects) ? projects : undefined
+      seat, declared: Array.isArray(projects), projects: Array.isArray(projects) && (state.tricks.length > 0 || state.phase === "round_complete" || state.phase === "match_complete") ? projects : undefined
     })),
     projectWindowOpen: projectDeclarationWindow(state),
     myProjectsDeclared: state.projectsBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))] !== null,
