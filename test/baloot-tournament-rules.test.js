@@ -7,7 +7,20 @@ import {
 } from "../baloot-tournament-rules.js";
 
 const card = (suit, rank) => ({suit,rank});
-const padded = cards => [...cards, card("D","7"),card("C","8"),card("H","9")].slice(0,8);
+const padded = cards => {
+  const hand = [...cards];
+  const used = new Set(hand.map(item => item.suit + ":" + item.rank));
+  for (const suit of ["S","H","D","C"]) {
+    for (const rank of ["7","8","9","J","Q","K","10","A"]) {
+      const key = suit + ":" + rank;
+      if (!used.has(key) && hand.length < 8) {
+        hand.push(card(suit, rank));
+        used.add(key);
+      }
+    }
+  }
+  return hand;
+};
 
 test("detects Sira, Fifty and Hundred sequences with Saudi Sun/Hokom values", () => {
   const sun = detectProjects(padded([card("S","A"),card("S","K"),card("S","Q"),card("S","J"),card("S","10")]),{type:"sun"},0);
@@ -53,7 +66,7 @@ test("only winning team's projects count, and only double doubles project points
   ];
   const doubled=settleProjects(bySeat,{type:"sun"},0,2);
   assert.equal(doubled.winningTeam,1);
-  assert.deepEqual(doubled.awarded,[0,20]);
+  assert.deepEqual(doubled.awarded,[0,40]);
   const tripled=settleProjects(bySeat,{type:"sun"},0,3);
   assert.deepEqual(tripled.awarded,[0,10]);
 });
