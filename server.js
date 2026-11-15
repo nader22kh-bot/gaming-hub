@@ -1071,7 +1071,7 @@ async function start() {
 
   app.listen(port, () => console.log(`Gaming Hub listening on port ${port}`));
   if (bot) {
-    const webhookBase = (process.env.TELEGRAM_WEBHOOK_URL || "https://gaming-hub-0agm.onrender.com").replace(/\\/+$/, "");
+    const webhookBase = (process.env.TELEGRAM_WEBHOOK_URL || "https://gaming-hub-0agm.onrender.com").replace(/\/+$/, "");
     await bot.telegram.setWebhook(`${webhookBase}${telegramWebhookPath}`, {
       secret_token: telegramWebhookSecret
     });
