@@ -191,7 +191,7 @@
             <button class="game-action" data-rule-decision="upheld">${t("Uphold","تأييد")}</button>
             <button class="answer" data-rule-decision="rejected">${t("Reject","رفض")}</button>
             <button class="answer" data-rule-decision="warning">${t("Warning","إنذار")}</button>
-            <button class="answer" data-rule-decision="redeal">${t("Redeal ruling","إعادة التوزيع")}</button>
+            <button class="answer" data-rule-decision="redeal">${t("Record redeal ruling","تسجيل حكم إعادة التوزيع")}</button>
           </div>`:`<p class="muted">${t("Waiting for the table host to record the ruling","بانتظار صاحب الطاولة لتسجيل الحكم")}</p>`}
         </div>`
       : `<div class="multi-controls"><select id="multiRuleKind">
