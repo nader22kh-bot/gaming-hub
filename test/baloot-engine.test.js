@@ -405,11 +405,11 @@ test("a raw-point tie in a doubled hand is lost by the doubler", () => {
   assert.deepEqual(state.roundResult.gamePoints,[0,52]);
 });
 
-test("closed Hokom prevents trumping while a non-trump card remains", () => {
+test("closed Hokom prevents leading trump but still allows a legal cut", () => {
   const hand=[{suit:"S",rank:"7"},{suit:"H",rank:"7"}];
+  assert.deepEqual(legalCards(hand,[],{type:"hokom",trumpSuit:"S",locked:true},1),[hand[1]]);
   const trick=[{seat:0,card:{suit:"D",rank:"7"}}];
-  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:true},1),[hand[1]]);
-  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:false},1),[hand[0]]);
+  assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:true},1),[hand[0]]);
 });
 
 test("Baloot must be announced on the second trump King or Queen before it is played", () => {
