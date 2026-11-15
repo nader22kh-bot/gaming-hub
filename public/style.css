@@ -285,3 +285,20 @@ body.rtl .streak-best{text-align:left}
   .baloot-casino-hand{justify-content:flex-start;gap:4px}
   .baloot-casino-hand .baloot-3d-card{flex:0 0 calc((100% - 28px)/8);min-width:0;height:86px;padding:5px 3px!important}
 }
+
+
+/* Saudi Baloot auction and match-state additions */
+.baloot-upcard{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  margin:12px auto;padding:10px 14px;max-width:420px;
+  border:1px solid rgba(255,255,255,.16);border-radius:14px;
+  background:rgba(255,255,255,.07);font-weight:700;
+}
+.baloot-upcard b{opacity:.72;font-size:.78rem;letter-spacing:.04em}
+.baloot-upcard span{font-size:1.35rem}
+.multi-baloot .multi-controls select{
+  min-height:42px;border-radius:10px;padding:8px 12px;
+  border:1px solid rgba(255,255,255,.2);background:#182a24;color:inherit;
+}
+.multi-baloot .multi-score{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.multi-baloot .multi-seat.active-turn{outline:2px solid rgba(255,205,80,.75);outline-offset:1px}
