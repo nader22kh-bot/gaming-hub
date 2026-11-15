@@ -26,7 +26,7 @@ export function detectProjects(hand, contract, seat = 0) {
       }
       run.push(index);
     }
-    addSequenceProject(projects, run.length, suit, seat, contract.type);
+    addSequenceProject(projects, run, suit, seat, contract.type);
   }
 
   const counts = new Map();
