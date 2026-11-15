@@ -66,7 +66,8 @@ test("only winning team's projects count, and only double doubles project points
   ];
   const doubled=settleProjects(bySeat,{type:"sun"},0,2);
   assert.equal(doubled.winningTeam,1);
-  assert.deepEqual(doubled.awarded,[0,40]);\n  assert.deepEqual(doubled.rawAwarded,[0,100]);
+  assert.deepEqual(doubled.awarded,[0,40]);
+  assert.deepEqual(doubled.rawAwarded,[0,100]);
   const tripled=settleProjects(bySeat,{type:"sun"},0,3);
   assert.deepEqual(tripled.awarded,[0,20]);
 });
