@@ -486,6 +486,19 @@ test("closed Hokom prevents leading trump but still allows a legal cut", () => {
   assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S",locked:true},1),[hand[0]]);
 });
 
+test("Akka is announced only when the played card is the highest remaining in its suit", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing"; state.contract={type:"sun",bidderSeat:0,buyerSeat:0,team:0,trumpSuit:null};
+  state.currentSeat=0;
+  state.seats[0].hand=[{suit:"H",rank:"K"}];
+  state.seats[1].hand=[{suit:"H",rank:"A"}];
+  assert.throws(()=>applyMatchAction(state,"1",{type:"play",card:"H:K",announceAkka:true},"akka-invalid"),/higher unplayed/);
+  state.seats[1].hand=[];
+  assert.deepEqual(publicMatchState(state,"1").akkaEligibleCards,["H:K"]);
+  const played=applyMatchAction(state,"1",{type:"play",card:"H:K",announceAkka:true},"akka-valid");
+  assert.equal(played.state.akkaClaims[0].card,"H:K");
+});
+
 test("Baloot must be announced on the second trump King or Queen before it is played", () => {
   let state=createMatch(players(),()=>0.4);
   state.phase="playing"; state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
