@@ -120,8 +120,8 @@ test("Hokom requires an overtrump when an opponent trump is winning and a higher
   const hand = [{suit:"S",rank:"J"},{suit:"S",rank:"9"},{suit:"D",rank:"7"}];
   const trick = [
     {seat:0,card:{suit:"H",rank:"A"}},
-    {seat:1,card:{suit:"S",rank:"7"}},
-    {seat:2,card:{suit:"H",rank:"K"}}
+    {seat:1,card:{suit:"H",rank:"K"}},
+    {seat:2,card:{suit:"S",rank:"7"}}
   ];
   assert.deepEqual(legalCards(hand,trick,{type:"hokom",trumpSuit:"S"},3),hand.slice(0,2));
 });
