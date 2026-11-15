@@ -126,6 +126,10 @@ export function legalCards(hand, trick, contract, _seat) {
   if (contract?.type !== "hokom") return hand;
   const trumps = hand.filter(card => card.suit === contract.trumpSuit);
   if (!trumps.length) return hand;
+  if (contract.locked) {
+    const nonTrumps = hand.filter(card => card.suit !== contract.trumpSuit);
+    if (nonTrumps.length) return nonTrumps;
+  }
   const tableTrumps = trick.filter(play => play.card.suit === contract.trumpSuit);
   if (tableTrumps.length) {
     const highestTrump = Math.max(...tableTrumps.map(play => rankValue(play.card, contract)));
