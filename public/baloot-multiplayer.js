@@ -158,7 +158,7 @@
       const declarations=(room.projectDeclarations||[]).filter(item=>item.declared).map(item=>
         `<span class="trick-card">${item.seat+1}: ${(item.projects||[]).map(p=>t(p.type,p.type)).join(", ")||t("No projects","لا توجد مشاريع")}</span>`
       ).join("");
-      controls=`${projectButton}${declarations?`<div class="multi-trick">${declarations}</div>`:""}<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong></button>`).join("")}</div>`;
+      controls=`${projectButton}${declarations?`<div class="multi-trick">${declarations}</div>`:""}<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}" data-announce-baloot="${room.balootAnnouncementCard===cardKey(c)?"true":"false"}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong>${room.balootAnnouncementCard===cardKey(c)?`<small>${t("BALOOT!","بلوت!")}</small>`:""}</button>`).join("")}</div>`;
     }else if(room.phase==="round_complete"){
       const result=room.roundResult||{};
       const host=room.hostSeat===mySeat?.seat;
@@ -202,7 +202,7 @@
       send(action);
     });
     $("multiDeclareProjects")?.addEventListener("click",()=>send({type:"declare_projects"}));
-    document.querySelectorAll("[data-card]").forEach(button=>button.onclick=()=>send({type:"play",card:button.dataset.card}));
+    document.querySelectorAll("[data-card]").forEach(button=>button.onclick=()=>send({type:"play",card:button.dataset.card,announceBaloot:button.dataset.announceBaloot==="true"}));
     if($("multiNext"))$("multiNext").onclick=()=>send({type:"next_round"});
     if($("multiBack"))$("multiBack").onclick=showMenu;
   }
