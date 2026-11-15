@@ -178,6 +178,27 @@
     }else{
       controls=`<p class="muted">${myTurn?t("Your turn","دورك الآن"):t("Waiting for turn","بانتظار دورك")}</p>`;
     }
+    const isHost=room.hostSeat===mySeat?.seat;
+    const ruleCall=room.pendingRuleCall;
+    const rulePanel=room.phase==="playing" ? (ruleCall
+      ? `<div class="baloot-reward"><b>${t("Table ruling requested","تم طلب حكم الطاولة")}: ${escape(ruleCall.kind)}</b>
+          <p>${t("Called by seat","طلبه اللاعب")} ${ruleCall.callerSeat+1} · ${ruleCall.targetSeat===null?"":t("Target seat","اللاعب المعني")+" "+(ruleCall.targetSeat+1)}</p>
+          ${isHost?`<div class="multi-controls">
+            <button class="game-action" data-rule-decision="upheld">${t("Uphold","تأييد")}</button>
+            <button class="answer" data-rule-decision="rejected">${t("Reject","رفض")}</button>
+            <button class="answer" data-rule-decision="warning">${t("Warning","إنذار")}</button>
+            <button class="answer" data-rule-decision="redeal">${t("Redeal ruling","إعادة التوزيع")}</button>
+          </div>`:`<p class="muted">${t("Waiting for the table host to record the ruling","بانتظار صاحب الطاولة لتسجيل الحكم")}</p>`}
+        </div>`
+      : `<div class="multi-controls"><select id="multiRuleKind">
+          <option value="qayd">${t("Qayd / اعتراض","قيد / اعتراض")}</option>
+          <option value="sawa">${t("Sawa","سوا")}</option>
+          <option value="akka">${t("Akka","إكة")}</option>
+          <option value="takyid">${t("Takyid","تقييد")}</option>
+          <option value="takweesh">${t("Takweesh","تكويش")}</option>
+        </select><select id="multiRuleTarget"><option value="">${t("No target","بدون لاعب محدد")}</option>${room.seats.map(p=>`<option value="${p.seat}">${p.seat+1}. ${escape(p.name)}</option>`).join("")}</select>
+        <button class="answer" id="multiCallRule">${t("Request table ruling","طلب حكم")}</button></div>`
+    ) : "";
     const auction=(room.bidHistory||[]).slice(-6).map(item=>{
       const label=item.bid==="pass"?t("Pass","بس"):item.bid==="sun"?t("Sun","صن"):item.bid==="ashkal"?t("Ashkal","أشكل"):t("Hokom","حكم");
       return `<span class="trick-card">${item.seat+1}: ${label}</span>`;
@@ -189,12 +210,20 @@
       <div class="multi-trick">${trick}</div>
       ${auction?`<div class="multi-trick">${auction}</div>`:""}
       <p class="muted">${myTurn?t("Your turn","دورك الآن"):t("Waiting for turn","بانتظار دورك")} · ${escape(room.phase)}</p>
-      ${controls}<p class="muted" id="multiError"></p>
+      ${controls}${rulePanel}<p class="muted" id="multiError"></p>
     </div>`);
     document.querySelectorAll("[data-bid]").forEach(button=>button.onclick=()=>{
       const action={type:button.dataset.bid};
       if(action.type==="hokom")action.trumpSuit=room.bidRound===1?room.faceUp.suit:$("multiTrump").value;
       send(action);
+    });
+    $("multiCallRule")?.addEventListener("click",()=>{
+      const target=$("multiRuleTarget").value;
+      send({type:"call_rule",kind:$("multiRuleKind").value,targetSeat:target===""?null:Number(target)});
+    });
+    document.querySelectorAll("[data-rule-decision]").forEach(button=>button.onclick=()=>{
+      const note=window.prompt(t("Optional ruling note","ملاحظة الحكم (اختياري)"))||"";
+      send({type:"resolve_rule_call",decision:button.dataset.ruleDecision,note});
     });
     document.querySelectorAll("[data-double]").forEach(button=>button.onclick=()=>{
       const action={type:button.dataset.double};
