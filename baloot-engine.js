@@ -108,7 +108,13 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
 }
 
 export function legalCards(hand, trick, contract, _seat) {
-  if (!trick.length) return hand;
+  if (!trick.length) {
+    if (contract?.type === "hokom" && contract.locked &&
+        hand.some(card => card.suit !== contract.trumpSuit)) {
+      return hand.filter(card => card.suit !== contract.trumpSuit);
+    }
+    return hand;
+  }
   const leadSuit = trick[0].card.suit;
   const following = hand.filter(card => card.suit === leadSuit);
 
@@ -126,10 +132,6 @@ export function legalCards(hand, trick, contract, _seat) {
   if (contract?.type !== "hokom") return hand;
   const trumps = hand.filter(card => card.suit === contract.trumpSuit);
   if (!trumps.length) return hand;
-  if (contract.locked) {
-    const nonTrumps = hand.filter(card => card.suit !== contract.trumpSuit);
-    if (nonTrumps.length) return nonTrumps;
-  }
   const tableTrumps = trick.filter(play => play.card.suit === contract.trumpSuit);
   if (tableTrumps.length) {
     const highestTrump = Math.max(...tableTrumps.map(play => rankValue(play.card, contract)));
