@@ -252,7 +252,7 @@ test("reconnecting player receives their hand but not opponents' cards", () => {
   assert.equal(view.currentSeat,match.currentSeat);
 });
 
-function finishSunRound(initialPoints = [0,0], multiplier = 1) {
+function finishSunRound(initialPoints = [0,0], multiplier = 1, gahwa = false) {
   let state = createMatch(players(), () => 0.42);
   const deck = makeDeck(() => 0.22);
   const hands = dealHands(deck);
@@ -264,7 +264,7 @@ function finishSunRound(initialPoints = [0,0], multiplier = 1) {
   state.hostId = "1";
   state.matchPoints = [...initialPoints];
   state.targetScore = 152;
-  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };
+  if (multiplier > 1) state.doubling = { multiplier, level: multiplier===2?"double":multiplier===3?"three":gahwa?"gahwa":"four", final:true, locked:false, buyerSeat:1, buyerTeam:1, doublerSeat:0 };\n  state.gahwa=gahwa;
   state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
   state.currentSeat = 1;
   let counter = 0;
@@ -361,6 +361,28 @@ test("Hokom double can be declined by both opposing players", () => {
   assert.equal(state.phase,"playing");
   assert.equal(state.doubling.final,true);
   assert.equal(state.doubling.multiplier,1);
+});
+
+test("live Hokom double can interrupt play and resumes the exact pending turn", () => {
+  let state=createMatch(players(),()=>0.4);
+  state.phase="playing";
+  state.contract={type:"hokom",bidderSeat:1,buyerSeat:1,team:1,trumpSuit:"S"};
+  state.buyerSeat=1; state.currentSeat=2; state.hostId="1";
+  const called=applyMatchAction(state,"4",{type:"call_live_double",locked:true},"live-double").state;
+  assert.equal(called.phase,"doubling");
+  assert.equal(called.doubling.doublerSeat,3);
+  assert.equal(called.currentSeat,1);
+  const accepted=applyMatchAction(called,"2",{type:"accept"},"live-double-accept").state;
+  assert.equal(accepted.phase,"playing");
+  assert.equal(accepted.currentSeat,2);
+  assert.equal(accepted.contract.locked,true);
+});
+
+test("Gahwa awards the match to the hand winner even below 152", () => {
+  const finished=finishSunRound([0,0],4,true);
+  assert.equal(finished.phase,"match_complete");
+  assert.equal(finished.roundResult.gahwa,true);
+  assert.equal(finished.matchWinnerTeam,finished.roundResult.winningTeam);
 });
 
 test("Double multiplies the hand score and keeps Gahwa escalation separate", () => {
