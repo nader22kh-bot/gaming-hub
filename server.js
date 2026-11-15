@@ -363,8 +363,8 @@ app.post('/api/baloot/rooms/:code/join', requireTelegramUser, async (req,res)=>{
     const row=await client.query("SELECT state FROM baloot_rooms WHERE room_code=$1 FOR UPDATE",[code]);
     if(!row.rowCount) throw new Error("Room code not found.");
     const state=row.rows[0].state;
-    if(state.phase!=="lobby") throw new Error("This match has already started.");
     if(state.seats.some(p=>p?.userId===id)){await client.query("COMMIT");return res.json({room:roomView(state,id)});}
+    if(state.phase!=="lobby") throw new Error("This match has already started.");
     const seat=state.seats.findIndex(p=>p===null);
     if(seat<0) throw new Error("This table is full.");
     state.seats[seat]={userId:id,name:user.first_name||user.username||"Player",seat,ready:false};
