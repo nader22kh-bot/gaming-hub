@@ -221,7 +221,9 @@ test("Sun and Hokom use the Saudi card-point rounding and tie-break rules", () =
   assert.equal(failedSun.made,false);
   assert.deepEqual(failedSun.gamePoints,[0,26]);
   const hokom = scoreRound([82,80],{type:"hokom",team:0});
-  assert.deepEqual(hokom.gamePoints,[8,8]);
+  assert.equal(hokom.made,false);
+  assert.equal(hokom.winningTeam,1);
+  assert.deepEqual(hokom.gamePoints,[0,16]);
   assert.equal(hokom.totalGamePoints,16);
   const sunTie = scoreRound([65,65],{type:"sun",team:0});
   assert.equal(sunTie.made,false);
