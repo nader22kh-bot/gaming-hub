@@ -411,8 +411,11 @@ function applyBid(next, seat, action) {
 
 function balootAnnouncementCard(state, seat) {
   if (!state.contract || state.contract.type !== "hokom") return null;
-  const candidate = (state.projectCandidatesBySeat?.[seat] || []).find(project => project.type === "baloot");
-  if (!candidate || (state.projectsBySeat?.[seat] || []).some(project => project.type === "baloot")) return null;
+  const candidates = state.projectCandidatesBySeat?.[seat] || [];
+  const candidate = candidates.find(project => project.type === "baloot");
+  const blocksBalootKind = candidates.some(project => project.type === "hundred" &&
+    project.subtype === "kind" && ["K","Q"].includes(project.rank));
+  if (blocksBalootKind || !candidate || (state.projectsBySeat?.[seat] || []).some(project => project.type === "baloot")) return null;
   const plays = [
     ...(state.tricks || []).flatMap(trick => trick.plays || []),
     ...(state.trick || [])
@@ -538,7 +541,8 @@ export function applyMatchAction(state, userId, action, actionId) {
       if (next.projectsDeclaredBySeat?.[seat]) throw new Error("You have already declared your projects.");
       const candidates = next.projectCandidatesBySeat?.[seat] || [];
       const projects = candidates.filter(project => project.type !== "baloot");
-      const sequenceShowsBaloot = next.contract.type === "hokom" &&
+      const blocksBalootKind = projects.some(project => project.subtype === "kind" && ["K","Q"].includes(project.rank));
+      const sequenceShowsBaloot = next.contract.type === "hokom" && !blocksBalootKind &&
         projects.some(project => project.subtype === "sequence" &&
           project.suit === next.contract.trumpSuit &&
           project.ranks?.includes("K") && project.ranks?.includes("Q"));
