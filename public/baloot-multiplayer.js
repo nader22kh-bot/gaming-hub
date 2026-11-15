@@ -126,7 +126,13 @@
       }else controls=`<p class="muted">${t("Waiting for the current bidder…","بانتظار المزايد الحالي…")}</p>`;
       controls+=`<div class="baloot-upcard"><b>${t("Up-card","الورقة المكشوفة")}</b><span>${escape(up)}</span><small>${t("Auction round","جولة الشراء")} ${room.bidRound||1}/2</small></div>`;
     }else if(room.phase==="playing"&&myTurn){
-      controls=`<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong></button>`).join("")}</div>`;
+      const projectButton=room.projectWindowOpen&&!room.myProjectsDeclared
+        ?`<button class="answer" id="multiDeclareProjects">${t("Declare projects","إعلان المشاريع")}</button>`
+        :"";
+      const declarations=(room.projectDeclarations||[]).filter(item=>item.declared).map(item=>
+        `<span class="trick-card">${item.seat+1}: ${(item.projects||[]).map(p=>t(p.type,p.type)).join(", ")||t("No projects","لا توجد مشاريع")}</span>`
+      ).join("");
+      controls=`${projectButton}${declarations?`<div class="multi-trick">${declarations}</div>`:""}<div class="multi-hand">${(mySeat?.hand||[]).map(c=>`<button class="playing-card ${["H","D"].includes(c.suit)?"red-card":""}" data-card="${cardKey(c)}"><small>${escape(c.rank)}</small><strong>${suit(c.suit)}</strong></button>`).join("")}</div>`;
     }else if(room.phase==="round_complete"){
       const result=room.roundResult||{};
       const host=room.hostSeat===mySeat?.seat;
@@ -134,6 +140,7 @@
         ${result.made?t("Contract made","نجح الشراء"):t("Contract fell · defenders take the hand","سقط الشراء · الخصم يأخذ اليد")}<br>
         ${t("Card points","أبناط الورق")}: ${(result.teamPoints||[0,0]).join(" — ")}<br>
         ${t("Game points added","القيد المضاف")}: ${(result.gamePoints||[0,0]).join(" — ")}<br>
+        ${t("Project points","نقاط المشاريع")}: ${(result.projectPoints||[0,0]).join(" — ")}<br>
         ${t("Match score","نتيجة الصكة")}: ${(result.matchPoints||room.matchPoints||[0,0]).join(" — ")}
       </div>${host?`<button class="game-action" id="multiNext">${t("Deal next hand","وزّع اليد التالية")}</button>`:`<p class="muted">${t("Waiting for the host to deal again…","بانتظار صاحب الطاولة لبدء اليد التالية…")}</p>`}`;
     }else if(room.phase==="match_complete"){
@@ -163,6 +170,7 @@
       if(action.type==="hokom")action.trumpSuit=room.bidRound===1?room.faceUp.suit:$("multiTrump").value;
       send(action);
     });
+    $("multiDeclareProjects")?.addEventListener("click",()=>send({type:"declare_projects"}));
     document.querySelectorAll("[data-card]").forEach(button=>button.onclick=()=>send({type:"play",card:button.dataset.card}));
     if($("multiNext"))$("multiNext").onclick=()=>send({type:"next_round"});
     if($("multiBack"))$("multiBack").onclick=showMenu;
