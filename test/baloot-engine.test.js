@@ -52,6 +52,22 @@ test("first-round Hokom is tied to the up-card suit and Sun may overcall it", ()
   assert.equal(new Set(all.map(cardKey)).size, 32);
 });
 
+test("KSA Ace-upcard Hokom can only be overcalled with Sun by the player right of the dealer", () => {
+  let match = createMatch(players(), () => 0.4);
+  match.faceUp = { suit: "S", rank: "A" };
+  match = act(match, 1, {type:"pass"}, "ace-overcall-pass").state;
+  match = act(match, 2, {type:"hokom", trumpSuit:"S"}, "ace-hokom").state;
+  assert.throws(
+    () => act(match, 3, {type:"sun"}, "ace-sun-wrong-seat"),
+    /player to the dealer's right/
+  );
+  match = act(match, 3, {type:"pass"}, "ace-pass-3").state;
+  match = act(match, 0, {type:"pass"}, "ace-pass-0").state;
+  match = act(match, 1, {type:"sun"}, "ace-sun-right-seat").state;
+  assert.equal(match.contract.type, "sun");
+  assert.equal(match.contract.bidderSeat, 1);
+});
+
 test("a first-round Sun by the first bidder completes immediately", () => {
   const match = act(createMatch(players(), () => 0.4), 1, {type:"sun"}, "sun-first").state;
   assert.equal(match.phase, "playing");
