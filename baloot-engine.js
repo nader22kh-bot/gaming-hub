@@ -48,19 +48,19 @@ function cardPointsToGamePoints(rawPoints, contractType) {
   return Math.floor((rawPoints + 4) / 10);
 }
 
-export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
+export function scoreRound(teamPoints, contract, teamTricks = [0, 0], projectRawPoints = [0, 0], multiplier = 1) {
   const target = contractTargetPoints(contract.type);
   const baseGamePoints = contract.type === "sun" ? 26 : 16;
-  const contractScore = Number(teamPoints[contract.team] || 0);
-  const defendingScore = Number(teamPoints[1 - contract.team] || 0);
-  const countingTeam = 1 - contract.team;
+  const contractScore = Number(teamPoints[contract.team] || 0) + Number(projectRawPoints[contract.team] || 0);
+  const defendingTeam = 1 - contract.team;
+  const defendingScore = Number(teamPoints[defendingTeam] || 0) + Number(projectRawPoints[defendingTeam] || 0);
+  const countingTeam = defendingTeam;
   const countingRawPoints = defendingScore;
-  const countingGamePoints = cardPointsToGamePoints(countingRawPoints, contract.type);
+  const countingGamePoints = cardPointsToGamePoints(Number(teamPoints[countingTeam] || 0), contract.type);
   const contractGamePoints = baseGamePoints - countingGamePoints;
   const cardGamePoints = [0, 0];
   cardGamePoints[countingTeam] = countingGamePoints;
   cardGamePoints[contract.team] = contractGamePoints;
-  const remainder = countingRawPoints % 10;
   const kabootTeam = teamTricks[0] === 8 ? 0 : teamTricks[1] === 8 ? 1 : null;
   const gamePoints = [0, 0];
   let winningTeam;
@@ -68,24 +68,19 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
   if (kabootTeam !== null) {
     winningTeam = kabootTeam;
     gamePoints[kabootTeam] = contract.type === "sun" ? 44 : 25;
+  } else if (contractScore > defendingScore) {
+    winningTeam = contract.team;
+    gamePoints[0] = cardGamePoints[0];
+    gamePoints[1] = cardGamePoints[1];
+  } else if (contractScore < defendingScore || (contractScore === defendingScore && multiplier > 1)) {
+    // In a doubled hand, a raw-point tie is lost by the buyer (the doubled side).
+    winningTeam = defendingTeam;
+    gamePoints[winningTeam] = baseGamePoints;
   } else {
-    if (countingGamePoints > contractGamePoints) {
-      winningTeam = countingTeam;
-    } else if (countingGamePoints < contractGamePoints) {
-      winningTeam = contract.team;
-    } else {
-      const countingTeamWinsTie = contract.type === "hokom"
-        ? [2, 3, 4, 5].includes(remainder)
-        : [1, 2, 3, 4].includes(remainder);
-      winningTeam = countingTeamWinsTie ? countingTeam : contract.team;
-    }
-
-    if (winningTeam === contract.team) {
-      gamePoints[0] = cardGamePoints[0];
-      gamePoints[1] = cardGamePoints[1];
-    } else {
-      gamePoints[winningTeam] = baseGamePoints;
-    }
+    // An ordinary tie is made by the buyer.
+    winningTeam = contract.team;
+    gamePoints[0] = cardGamePoints[0];
+    gamePoints[1] = cardGamePoints[1];
   }
 
   return {
@@ -100,6 +95,7 @@ export function scoreRound(teamPoints, contract, teamTricks = [0, 0]) {
     made: winningTeam === contract.team,
     winningTeam,
     teamPoints: [...teamPoints],
+    projectRawPoints: [...projectRawPoints],
     teamTricks: [...teamTricks],
     gamePoints,
     kaboot: kabootTeam !== null,
@@ -575,27 +571,35 @@ export function applyMatchAction(state, userId, action, actionId) {
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
         next.declarationsClosed = true;
-        const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
         const multiplier = next.doubling?.multiplier || 1;
+        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, multiplier);
+        const result = scoreRound(next.teamPoints, next.contract, next.teamTricks, projectResult.rawAwarded, multiplier);
+        let projectPoints = [...projectResult.awarded];
+        if (result.kaboot) {
+          projectPoints = [0,0];
+          for (const project of projectResult.projects || []) {
+            if (teamOf(project.seat) !== result.winningTeam) continue;
+            projectPoints[result.winningTeam] += project.type === "baloot"
+              ? 2 : project.value * (multiplier === 2 ? 2 : 1);
+          }
+        } else if (!result.made) {
+          projectPoints = [0,0];
+          projectPoints[1 - next.contract.team] = projectResult.awarded.reduce((sum,value)=>sum+value,0);
+        }
         if (multiplier > 1) {
-          const rawTie = next.teamPoints[0] === next.teamPoints[1];
-          const winningTeam = rawTie ? next.contract.team : (next.teamPoints[0] > next.teamPoints[1] ? 0 : 1);
           const doubledPoints = [0, 0];
           const base = next.contract.type === "sun" ? 26 : 16;
-          doubledPoints[winningTeam] = result.kaboot
+          doubledPoints[result.winningTeam] = result.kaboot
             ? (next.contract.type === "sun" ? 44 : 25)
             : base * multiplier;
-          result.winningTeam = winningTeam;
-          result.made = winningTeam === next.contract.team;
           result.gamePoints = doubledPoints;
           result.totalGamePoints = doubledPoints[0] + doubledPoints[1];
           result.doubled = true;
           result.multiplier = multiplier;
         }
-        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer, multiplier);
-        result.projectPoints = [...projectResult.awarded];
+        result.projectPoints = [...projectPoints];
         result.projectResult = projectResult;
-        result.gamePoints = result.gamePoints.map((points, team) => points + projectResult.awarded[team]);
+        result.gamePoints = result.gamePoints.map((points, team) => points + projectPoints[team]);
         next.projectResult = projectResult;
         next.matchPoints = next.matchPoints.map((points, team) => points + result.gamePoints[team]);
         const topScore = Math.max(...next.matchPoints);
