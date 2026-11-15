@@ -214,6 +214,14 @@ test("duplicate action ids do not apply twice", () => {
   assert.equal(second.state.bidHistory.length,1);
 });
 
+test("projects count as raw points before deciding whether the buyer made the contract", () => {
+  const result=scoreRound([74,56],{type:"sun",team:0},[4,4],[0,20]);
+  assert.equal(result.contractScore,74);
+  assert.equal(result.defendingScore,76);
+  assert.equal(result.made,false);
+  assert.equal(result.winningTeam,1);
+});
+
 test("Sun and Hokom use the Saudi card-point rounding and tie-break rules", () => {
   assert.equal(contractTargetPoints("sun"),65);
   assert.equal(contractTargetPoints("hokom"),81);
