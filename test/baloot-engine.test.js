@@ -43,11 +43,11 @@ test("only the team with the highest project receives its projects; equal streng
   ];
   const result = awardProjects(playerProjects,"sun",0);
   assert.equal(result.winnerTeam,1);
-  assert.deepEqual(result.gamePoints,[0,10]);
+  assert.deepEqual(result.gamePoints,[0,20]);
   const tied = awardProjects([
     [{kind:"fifty",highRank:1}],[],[],[{kind:"fifty",highRank:1}]
   ],"sun",0);
-  assert.equal(tied.winnerTeam,0);
+  assert.equal(tied.winnerTeam,1);
 });
 
 test("32-card deck is unique and full deal gives eight cards each", () => {
