@@ -274,6 +274,37 @@ function finishSunRound(initialPoints = [0,0]) {
   return state;
 }
 
+test("project declarations are server-verified, one per seat, and scored into the match", () => {
+  let state = createMatch(players(), () => 0.42);
+  const deck = makeDeck(() => 0.22);
+  const hands = dealHands(deck);
+  state.phase = "playing";
+  state.faceUp = null;
+  state.stock = [];
+  state.contract = {type:"sun",bidderSeat:1,team:1,trumpSuit:null,ashkal:false};
+  state.buyerSeat = 1;
+  state.hostId = "1";
+  state.seats.forEach((player, seat) => { player.hand = hands[seat]; });
+  state.currentSeat = 1;
+  const declared = act(state,1,{type:"declare_projects"},"project-declare");
+  assert.equal(declared.event.type,"projects_declared");
+  assert.equal(declared.state.currentSeat,1);
+  assert.throws(()=>act(declared.state,1,{type:"declare_projects"},"project-declare-again"),/already declared/);
+  assert.equal(publicMatchState(declared.state,"1").myProjectsDeclared,true);
+  let finished = declared.state;
+  let counter = 0;
+  while (finished.phase === "playing" && counter < 32) {
+    const seat = finished.currentSeat;
+    const card = legalCards(finished.seats[seat].hand,finished.trick,finished.contract,seat)[0];
+    finished = applyMatchAction(finished,finished.seats[seat].userId,{type:"play",card:cardKey(card)},"project-round-"+counter).state;
+    counter++;
+  }
+  assert.equal(finished.phase,"round_complete");
+  assert.ok(finished.roundResult.projectPoints);
+  assert.deepEqual(finished.matchPoints,finished.roundResult.gamePoints);
+  assert.equal(finished.declarationsClosed,true);
+});
+
 test("match score accumulates and host can start the next deal with dealer rotation", () => {
   const completed = finishSunRound();
   assert.equal(completed.matchPoints[0] + completed.matchPoints[1],26);
