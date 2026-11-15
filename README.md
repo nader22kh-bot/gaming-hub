@@ -28,6 +28,13 @@ The multiplayer Baloot implementation uses the existing Express + PostgreSQL Ren
 
 This is the multiplayer core ruleset, not yet a complete tournament-variant engine. Projects (Sira/Fifty/Hundred/four-of-a-kind/Baloot), Double/Three/Four/Gahwa, Sawa and Qayd are not implemented. Local house rules can differ; these options need a single agreed tournament profile before being enabled. The simplified 20-stage Baloot Challenge remains a separate solo progression mode.
 
+
+### Saudi tournament-rule implementation work (in progress)
+
+The accepted rules reference is the General Baloot Regulations published with the Saudi Entertainment Authority / Saudi Mind Sports Federation branding: https://enjoy.sa/media/j1ofreng/baloot.pdf. The new `baloot-tournament-rules.js` module currently provides pure, server-side helpers for project detection/priority/settlement, the Double → Three → Four → Gahwa decision sequence, Akka validation, and pending Qayd/Sawa/Akka/takyid/takweesh rulings. Unit tests are in `test/baloot-tournament-rules.test.js`.
+
+**Important:** this work is not yet wired into the live room action flow or UI. The Qayd/Sawa/takyid/takweesh rules in the published regulation rely on a table judge and the document does not define a fully automatic adjudication algorithm; claims are therefore recorded as pending and cannot award points or force a redeal from client input. The branch must pass the full test/build checks and the remaining room integration work before it is merged or deployed.
+
 ## Existing systems preserved
 
 The multiplayer changes do not alter the players, baloot_progress, baloot_inventory, VIP, ad-reward or other game tables. Cosmetic purchases continue to use earned game points; no new Stars purchase or paid game feature was introduced.
