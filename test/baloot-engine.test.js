@@ -5,6 +5,7 @@ import {
   contractTargetPoints, scoreRound, createMatch, applyMatchAction,
   publicMatchState, cardKey, startNextRound
 } from "../baloot-engine.js";
+import { detectProjects } from "../baloot-tournament-rules.js";
 
 const players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
 const act = (state, seat, action, id = crypto.randomUUID()) =>
