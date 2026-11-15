@@ -1,7 +1,7 @@
+import { detectProjects, settleProjects, projectDeclarationWindow } from "./baloot-tournament-rules.js";
 // Server-authoritative Saudi Baloot core rules.
 // A hand starts with five cards, an up-card auction, then three more cards.
-// Optional house-table modules (projects, doubles/Gahwa, Qayd and Sawa) are
-// deliberately not simulated until their tournament rule variants are agreed.
+// Saudi tournament projects are declared and settled by the authoritative engine.
 export const SUITS = ["S", "H", "D", "C"];
 export const RANKS = ["7", "8", "9", "J", "Q", "K", "10", "A"];
 const SUN_ORDER = ["7", "8", "9", "J", "Q", "K", "10", "A"];
@@ -202,7 +202,10 @@ export function createMatch(players, random = Math.random, options = {}) {
     matchPoints: options.matchPoints ? [...options.matchPoints] : [0, 0],
     actionIds: [],
     hostId: options.hostId || null,
-    lastActionAt: new Date().toISOString()
+    lastActionAt: new Date().toISOString(),
+    projectsBySeat: [null, null, null, null],
+    declarationsClosed: false,
+    projectResult: null
   };
 }
 
@@ -244,6 +247,9 @@ function completeAuction(state) {
   next.bidPasses = 0;
   next.sunOvercallEligible = [];
   next.phase = "playing";
+  next.projectsBySeat = [null, null, null, null];
+  next.declarationsClosed = false;
+  next.projectResult = null;
   next.currentSeat = advanceSeat(next.dealer);
   return next;
 }
@@ -412,7 +418,14 @@ export function applyMatchAction(state, userId, action, actionId) {
       return { state: redealt, duplicate: false, event };
     }
   } else if (next.phase === "playing") {
-    if (action?.type !== "play") throw new Error("Play one card.");
+    if (action?.type === "declare_projects") {
+      if (!projectDeclarationWindow(next)) throw new Error("The project declaration window is closed.");
+      if (next.projectsBySeat?.[seat] !== null) throw new Error("You have already declared your projects.");
+      const projects = detectProjects(next.seats[seat].hand, next.contract, seat);
+      next.projectsBySeat[seat] = projects;
+      event = { type: "projects_declared", seat, projects };
+    } else if (action?.type !== "play") throw new Error("Declare projects or play one card.");
+    if (action?.type === "play") {
     const hand = next.seats[seat].hand;
     const index = hand.findIndex(card => cardKey(card) === action.card);
     if (index < 0) throw new Error("That card is not in your hand.");
@@ -437,7 +450,13 @@ export function applyMatchAction(state, userId, action, actionId) {
       next.currentSeat = winner.seat;
       event = { type: "trick_complete", winnerSeat: winner.seat, points: total };
       if (next.tricks.length === 8) {
+        next.declarationsClosed = true;
         const result = scoreRound(next.teamPoints, next.contract, next.teamTricks);
+        const projectResult = settleProjects((next.projectsBySeat || []).map(value => value || []), next.contract, next.dealer);
+        result.projectPoints = [...projectResult.awarded];
+        result.projectResult = projectResult;
+        result.gamePoints = result.gamePoints.map((points, team) => points + projectResult.awarded[team]);
+        next.projectResult = projectResult;
         next.matchPoints = next.matchPoints.map((points, team) => points + result.gamePoints[team]);
         const topScore = Math.max(...next.matchPoints);
         const tiedAtTarget = next.matchPoints[0] === next.matchPoints[1] && topScore >= next.targetScore;
@@ -448,6 +467,7 @@ export function applyMatchAction(state, userId, action, actionId) {
     } else {
       next.currentSeat = advanceSeat(seat);
       event = { type: "card_played", seat, card: cardKey(card) };
+    }
     }
   } else {
     throw new Error("This round is complete.");
@@ -476,6 +496,12 @@ export function publicMatchState(state, viewerId) {
     targetScore: state.targetScore,
     matchPoints: state.matchPoints,
     roundResult: state.roundResult || null,
+    projectDeclarations: (state.projectsBySeat || [null,null,null,null]).map((projects, seat) => ({
+      seat, declared: Array.isArray(projects), projects: Array.isArray(projects) ? projects : undefined
+    })),
+    projectWindowOpen: projectDeclarationWindow(state),
+    myProjectsDeclared: state.projectsBySeat?.[state.seats.findIndex(player => player.userId === String(viewerId))] !== null,
+    projectResult: state.projectResult || null,
     seats: state.seats.map(player => ({
       name: player.name,
       seat: player.seat,
