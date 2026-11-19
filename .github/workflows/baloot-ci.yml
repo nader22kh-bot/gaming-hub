@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/saudi-baloot-multiplayer
+      - fix/ksa-baloot-rules
   pull_request:
     branches:
       - main

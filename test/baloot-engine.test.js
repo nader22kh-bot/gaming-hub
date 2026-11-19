@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   makeDeck, dealHands, legalCards, winningPlay, cardPoints,
   contractTargetPoints, scoreRound, createMatch, applyMatchAction,
-  publicMatchState, cardKey, startNextRound
+  publicMatchState, cardKey, startNextRound, detectProjects, projectValue, awardProjects
 } from "../baloot-engine.js";
 import { detectProjects } from "../baloot-tournament-rules.js";
 
@@ -11,6 +11,46 @@ const card = (suit,rank) => ({suit,rank});
 const players = () => [1, 2, 3, 4].map(userId => ({ userId, name: "P" + userId }));
 const act = (state, seat, action, id = crypto.randomUUID()) =>
   applyMatchAction(state, state.seats[seat].userId, action, id);
+
+test("Saudi project values match the published tournament table", () => {
+  assert.equal(projectValue({kind:"sara"},"sun"),4);
+  assert.equal(projectValue({kind:"fifty"},"sun"),10);
+  assert.equal(projectValue({kind:"hundred_run"},"sun"),20);
+  assert.equal(projectValue({kind:"fourHundred"},"sun"),40);
+  assert.equal(projectValue({kind:"sara"},"hokom"),2);
+  assert.equal(projectValue({kind:"fifty"},"hokom"),5);
+  assert.equal(projectValue({kind:"hundred_set"},"hokom"),10);
+});
+
+test("project detector recognizes a five-card same-suit sequence and Sun four Aces", () => {
+  const sequence = [
+    {suit:"S",rank:"A"},{suit:"S",rank:"K"},{suit:"S",rank:"Q"},
+    {suit:"S",rank:"J"},{suit:"S",rank:"10"},
+    {suit:"H",rank:"7"},{suit:"D",rank:"8"},{suit:"C",rank:"9"}
+  ];
+  assert.equal(detectProjects(sequence,{type:"sun"})[0].kind,"hundred_run");
+  const aces = ["S","H","D","C"].map(suit=>({suit,rank:"A"})).concat([
+    {suit:"S",rank:"7"},{suit:"H",rank:"8"},{suit:"D",rank:"9"},{suit:"C",rank:"10"}
+  ]);
+  assert.ok(detectProjects(aces,{type:"sun"}).some(project=>project.kind==="fourHundred"));
+  assert.ok(detectProjects(aces,{type:"hokom"}).some(project=>project.kind==="hundred_set"));
+});
+
+test("only the team with the highest project receives its projects; equal strength uses dealer-right priority", () => {
+  const playerProjects = [
+    [{kind:"sara",highRank:1}],
+    [{kind:"hundred_run",highRank:0}],
+    [{kind:"fifty",highRank:0}],
+    []
+  ];
+  const result = awardProjects(playerProjects,"sun",0);
+  assert.equal(result.winnerTeam,1);
+  assert.deepEqual(result.gamePoints,[0,20]);
+  const tied = awardProjects([
+    [{kind:"fifty",highRank:1}],[],[],[{kind:"fifty",highRank:1}]
+  ],"sun",0);
+  assert.equal(tied.winnerTeam,1);
+});
 
 test("32-card deck is unique and full deal gives eight cards each", () => {
   const deck = makeDeck(() => 0.5);
@@ -52,6 +92,22 @@ test("first-round Hokom is tied to the up-card suit and Sun may overcall it", ()
   assert.equal(match.stock.length, 0);
   const all = match.seats.flatMap(player => player.hand);
   assert.equal(new Set(all.map(cardKey)).size, 32);
+});
+
+test("KSA Ace-upcard Hokom can only be overcalled with Sun by the player right of the dealer", () => {
+  let match = createMatch(players(), () => 0.4);
+  match.faceUp = { suit: "S", rank: "A" };
+  match = act(match, 1, {type:"pass"}, "ace-overcall-pass").state;
+  match = act(match, 2, {type:"hokom", trumpSuit:"S"}, "ace-hokom").state;
+  assert.throws(
+    () => act(match, 3, {type:"sun"}, "ace-sun-wrong-seat"),
+    /player to the dealer's right/
+  );
+  match = act(match, 3, {type:"pass"}, "ace-pass-3").state;
+  match = act(match, 0, {type:"pass"}, "ace-pass-0").state;
+  match = act(match, 1, {type:"sun"}, "ace-sun-right-seat").state;
+  assert.equal(match.contract.type, "sun");
+  assert.equal(match.contract.bidderSeat, 1);
 });
 
 test("a first-round Sun by the first bidder completes immediately", () => {
